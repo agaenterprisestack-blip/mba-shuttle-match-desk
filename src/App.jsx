@@ -29,18 +29,311 @@ const createTournamentTeam = (index) => ({
 
 const createTournamentTeams = (count = 8) => Array.from({ length: count }, (_, index) => createTournamentTeam(index))
 
-const createGame = (teams, format, target, tournamentRef = null) => ({
+const RESULT_CARD_WIDTH = 1080
+const RESULT_CARD_HEIGHT = 1350
+
+const fitCanvasText = (context, text, maxWidth, fontSize, fontFamily) => {
+  let size = fontSize
+  context.font = `700 ${size}px ${fontFamily}`
+  while (context.measureText(text).width > maxWidth && size > 30) {
+    size -= 2
+    context.font = `700 ${size}px ${fontFamily}`
+  }
+  return size
+}
+
+const calculatePlayerPerformance = (match, side, playerIndex) => {
+  const pointsWon = match.rallies.filter((rally) =>
+    rally.team === side &&
+    rally.detail?.playerSide === side &&
+    rally.detail.playerIndex === playerIndex &&
+    rally.detail.outcomeKind === 'winner',
+  ).length
+  const pointsMissed = match.rallies.filter((rally) =>
+    rally.team !== side &&
+    rally.detail?.playerSide === side &&
+    rally.detail.playerIndex === playerIndex &&
+    rally.detail.outcomeKind === 'error',
+  ).length
+  const totalGamePoints = match.rallies.length
+
+  return {
+    percentage: totalGamePoints ? Math.round((pointsWon / totalGamePoints) * 100) : 0,
+    pointsWon,
+    pointsMissed,
+    totalGamePoints,
+  }
+}
+
+const createResultCardCanvas = (match, roundName) => {
+  const canvas = document.createElement('canvas')
+  canvas.width = RESULT_CARD_WIDTH
+  canvas.height = RESULT_CARD_HEIGHT
+  const context = canvas.getContext('2d')
+  const winner = match.teams[match.winner]
+  const loser = match.teams[1 - match.winner]
+  const formatName = match.format === 'singles' ? 'SINGLES' : 'DOUBLES'
+  const playerLine = (team) => team.players.map((player) => player.name.trim() || 'Unnamed player').join('  ·  ')
+
+  context.fillStyle = '#123d30'
+  context.fillRect(0, 0, RESULT_CARD_WIDTH, RESULT_CARD_HEIGHT)
+  context.fillStyle = '#d9ef68'
+  context.fillRect(0, 0, RESULT_CARD_WIDTH, 18)
+  context.strokeStyle = '#416b55'
+  context.lineWidth = 3
+  context.strokeRect(44, 44, RESULT_CARD_WIDTH - 88, RESULT_CARD_HEIGHT - 88)
+  context.beginPath()
+  context.moveTo(540, 44)
+  context.lineTo(540, RESULT_CARD_HEIGHT - 44)
+  context.moveTo(44, 675)
+  context.lineTo(RESULT_CARD_WIDTH - 44, 675)
+  context.moveTo(210, 44)
+  context.lineTo(210, RESULT_CARD_HEIGHT - 44)
+  context.moveTo(870, 44)
+  context.lineTo(870, RESULT_CARD_HEIGHT - 44)
+  context.stroke()
+
+  context.textAlign = 'center'
+  context.fillStyle = '#d9ef68'
+  context.font = '800 27px Arial, sans-serif'
+  context.fillText('MBA  /  SHUTTLE MATCH DESK', 540, 126)
+  context.fillStyle = '#f3f4e9'
+  context.font = '700 22px Arial, sans-serif'
+  context.fillText([roundName, formatName].filter(Boolean).join('  ·  ').toUpperCase(), 540, 179)
+
+  context.fillStyle = '#ffffff'
+  context.font = '700 37px Arial, sans-serif'
+  context.fillText('MATCH COMPLETE', 540, 310)
+  context.fillStyle = '#d9ef68'
+  context.font = '700 30px Arial, sans-serif'
+  context.fillText('WINNER', 540, 386)
+
+  const winnerFontSize = fitCanvasText(context, winner.name, 820, 76, 'Georgia, serif')
+  context.fillStyle = '#f3f4e9'
+  context.font = `700 ${winnerFontSize}px Georgia, serif`
+  context.fillText(winner.name, 540, 493)
+  const winnerPlayersSize = fitCanvasText(context, playerLine(winner), 800, 31, 'Arial, sans-serif')
+  context.fillStyle = '#c5d5c7'
+  context.font = `500 ${winnerPlayersSize}px Arial, sans-serif`
+  context.fillText(playerLine(winner), 540, 555)
+
+  context.fillStyle = '#d9ef68'
+  context.font = '700 150px Georgia, serif'
+  context.fillText(`${match.scores[match.winner]} - ${match.scores[1 - match.winner]}`, 540, 710)
+  context.fillStyle = '#f3f4e9'
+  const loserFontSize = fitCanvasText(context, loser.name, 780, 43, 'Arial, sans-serif')
+  context.font = `700 ${loserFontSize}px Arial, sans-serif`
+  context.fillText(`vs  ${loser.name}`, 540, 789)
+  const loserPlayersSize = fitCanvasText(context, playerLine(loser), 780, 27, 'Arial, sans-serif')
+  context.fillStyle = '#c5d5c7'
+  context.font = `500 ${loserPlayersSize}px Arial, sans-serif`
+  context.fillText(playerLine(loser), 540, 837)
+
+  context.fillStyle = '#f3f4e9'
+  context.font = '700 28px Arial, sans-serif'
+  context.fillText('A GREAT MATCH. A CLEAR WINNER.', 540, 1110)
+  context.fillStyle = '#b9c8bc'
+  context.font = '500 22px Arial, sans-serif'
+  context.fillText(new Date().toLocaleDateString(), 540, 1170)
+  context.fillStyle = '#d9ef68'
+  context.font = '700 20px Arial, sans-serif'
+  context.fillText('PLAY  ·  COMPETE  ·  CELEBRATE', 540, 1230)
+
+  return canvas
+}
+
+const createRallyLogCanvases = (match) => {
+  const ralliesPerPage = 18
+  const rallies = match.rallies.length ? match.rallies : []
+  const pageCount = Math.max(1, Math.ceil(rallies.length / ralliesPerPage))
+  const winnerName = match.teams[match.winner].name
+
+  return Array.from({ length: pageCount }, (_, pageIndex) => {
+    const canvas = document.createElement('canvas')
+    canvas.width = RESULT_CARD_WIDTH
+    canvas.height = RESULT_CARD_HEIGHT
+    const context = canvas.getContext('2d')
+    const pageRallies = rallies.slice(pageIndex * ralliesPerPage, (pageIndex + 1) * ralliesPerPage)
+
+    context.fillStyle = '#f3f4e9'
+    context.fillRect(0, 0, RESULT_CARD_WIDTH, RESULT_CARD_HEIGHT)
+    context.fillStyle = '#123d30'
+    context.fillRect(0, 0, RESULT_CARD_WIDTH, 190)
+    context.fillStyle = '#d9ef68'
+    context.font = '800 25px Arial, sans-serif'
+    context.fillText('MBA  /  SHUTTLE MATCH DESK', 70, 67)
+    context.fillStyle = '#ffffff'
+    context.font = '700 42px Georgia, serif'
+    context.fillText('Point-by-point game log', 70, 128)
+    context.fillStyle = '#d9ef68'
+    context.font = '700 24px Arial, sans-serif'
+    context.fillText(`${match.teams[0].name}  ${match.scores[0]}  -  ${match.scores[1]}  ${match.teams[1].name}`, 70, 236)
+    context.fillStyle = '#50655a'
+    context.font = '700 18px Arial, sans-serif'
+    context.fillText('POINT', 70, 293)
+    context.fillText('RALLY RESULT', 190, 293)
+    context.textAlign = 'right'
+    context.fillText('SCORE', 1010, 293)
+    context.textAlign = 'left'
+
+    pageRallies.forEach((rally, rowIndex) => {
+      const y = 335 + rowIndex * 48
+      const creditedTeam = match.teams[rally.team].name
+      const detail = rally.detail
+        ? `${rally.detail.playerName} · ${rally.detail.outcome}`
+        : 'Point added'
+      const description = `${creditedTeam} · ${detail}`
+
+      context.fillStyle = rowIndex % 2 === 0 ? '#e5ebdf' : '#ffffff'
+      context.fillRect(58, y - 29, 964, 42)
+      context.fillStyle = '#1d563f'
+      context.font = '700 19px Arial, sans-serif'
+      context.fillText(String(rally.number).padStart(2, '0'), 75, y)
+      const descriptionFontSize = fitCanvasText(context, description, 700, 19, 'Arial, sans-serif')
+      context.fillStyle = '#294739'
+      context.font = `500 ${descriptionFontSize}px Arial, sans-serif`
+      context.fillText(description, 190, y)
+      context.textAlign = 'right'
+      context.font = '700 19px Arial, sans-serif'
+      context.fillText(`${rally.scores[0]} - ${rally.scores[1]}`, 1005, y)
+      context.textAlign = 'left'
+    })
+
+    context.fillStyle = '#1d563f'
+    context.fillRect(58, 1215, 964, 2)
+    context.fillStyle = '#50655a'
+    context.font = '600 18px Arial, sans-serif'
+    context.fillText(`${rallies.length} rallies  ·  ${winnerName} wins`, 70, 1260)
+    context.textAlign = 'right'
+    context.fillText(`${pageIndex + 1} / ${pageCount}`, 1010, 1260)
+    context.textAlign = 'left'
+    return canvas
+  })
+}
+
+const createPlayerPerformanceCanvas = (match) => {
+  const canvas = document.createElement('canvas')
+  canvas.width = RESULT_CARD_WIDTH
+  canvas.height = RESULT_CARD_HEIGHT
+  const context = canvas.getContext('2d')
+
+  context.fillStyle = '#f3f4e9'
+  context.fillRect(0, 0, RESULT_CARD_WIDTH, RESULT_CARD_HEIGHT)
+  context.fillStyle = '#123d30'
+  context.fillRect(0, 0, RESULT_CARD_WIDTH, 190)
+  context.fillStyle = '#d9ef68'
+  context.font = '800 25px Arial, sans-serif'
+  context.fillText('MBA  /  SHUTTLE MATCH DESK', 70, 67)
+  context.fillStyle = '#ffffff'
+  context.font = '700 42px Georgia, serif'
+  context.fillText('Player performance', 70, 128)
+  context.fillStyle = '#d9ef68'
+  context.font = '700 24px Arial, sans-serif'
+  context.fillText(`${match.teams[0].name}  ${match.scores[0]}  -  ${match.scores[1]}  ${match.teams[1].name}`, 70, 236)
+
+  context.fillStyle = '#50655a'
+  context.font = '700 18px Arial, sans-serif'
+  context.fillText('PLAYER', 70, 304)
+  context.fillText('TEAM', 430, 304)
+  context.fillText('WON', 690, 304)
+  context.fillText('MISSED', 800, 304)
+  context.textAlign = 'right'
+  context.fillText('PERFORMANCE', 1010, 304)
+  context.textAlign = 'left'
+
+  let rowIndex = 0
+  match.teams.forEach((team, side) => {
+    team.players.forEach((player, playerIndex) => {
+      const y = 365 + rowIndex * 82
+      const performance = calculatePlayerPerformance(match, side, playerIndex)
+      context.fillStyle = rowIndex % 2 === 0 ? '#e5ebdf' : '#ffffff'
+      context.fillRect(58, y - 37, 964, 66)
+      context.fillStyle = '#1d563f'
+      context.font = '700 22px Arial, sans-serif'
+      context.fillText(player.name.trim() || 'Unnamed player', 75, y)
+      context.fillStyle = '#53695c'
+      context.font = '500 19px Arial, sans-serif'
+      context.fillText(team.name, 430, y)
+      context.fillStyle = '#294739'
+      context.font = '700 20px Arial, sans-serif'
+      context.fillText(String(performance.pointsWon), 705, y)
+      context.fillText(String(performance.pointsMissed), 825, y)
+      context.textAlign = 'right'
+      context.fillText(`${performance.percentage}%`, 1005, y)
+      context.textAlign = 'left'
+      rowIndex += 1
+    })
+  })
+
+  context.fillStyle = '#1d563f'
+  context.fillRect(58, 1215, 964, 2)
+  context.fillStyle = '#50655a'
+  context.font = '600 18px Arial, sans-serif'
+  context.fillText(`Based on ${match.rallies.length} recorded rallies`, 70, 1260)
+  return canvas
+}
+
+const encodePdfFromJpegs = (jpegPages) => {
+  const encoder = new TextEncoder()
+  const chunks = []
+  const offsets = [0]
+  let byteLength = 0
+  const add = (chunk) => {
+    chunks.push(chunk)
+    byteLength += chunk.length
+  }
+  const addText = (text) => add(encoder.encode(text))
+
+  addText('%PDF-1.4\n')
+  const pageObjectIds = jpegPages.map((_, index) => 3 + index * 3)
+  const objects = [
+    '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n',
+    `2 0 obj\n<< /Type /Pages /Kids [${pageObjectIds.map((objectId) => `${objectId} 0 R`).join(' ')}] /Count ${jpegPages.length} >>\nendobj\n`,
+  ]
+
+  objects.forEach((object) => {
+    offsets.push(byteLength)
+    addText(object)
+  })
+
+  jpegPages.forEach((jpegBytes, index) => {
+    const pageObjectId = pageObjectIds[index]
+    const imageObjectId = pageObjectId + 1
+    const contentObjectId = pageObjectId + 2
+    const pageObject = `${pageObjectId} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 432 540] /Resources << /XObject << /Card ${imageObjectId} 0 R >> >> /Contents ${contentObjectId} 0 R >>\nendobj\n`
+    offsets.push(byteLength)
+    addText(pageObject)
+
+    offsets.push(byteLength)
+    addText(`${imageObjectId} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${RESULT_CARD_WIDTH} /Height ${RESULT_CARD_HEIGHT} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`)
+    add(jpegBytes)
+    addText('\nendstream\nendobj\n')
+
+    const content = 'q\n432 0 0 540 0 0 cm\n/Card Do\nQ\n'
+    offsets.push(byteLength)
+    addText(`${contentObjectId} 0 obj\n<< /Length ${encoder.encode(content).length} >>\nstream\n${content}endstream\nendobj\n`)
+  })
+
+  const crossReferenceOffset = byteLength
+  addText(`xref\n0 ${offsets.length}\n0000000000 65535 f \n${offsets.slice(1).map((offset) => `${String(offset).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size ${offsets.length} /Root 1 0 R >>\nstartxref\n${crossReferenceOffset}\n%%EOF`)
+  return new Blob(chunks, { type: 'application/pdf' })
+}
+
+const createGame = (teams, format, target, tournamentRef = null, firstServe = 0, serverIndex = 0) => ({
   format,
   target,
   tournamentRef,
-  teams: teams.map((team) => ({
+  teams: teams.map((team, teamIndex) => ({
     ...team,
-    players: team.players.map((player, index) => ({ ...player, court: index })),
+    players: team.players.map((player, index) => ({
+      ...player,
+      court: teamIndex === firstServe && index === serverIndex ? 0 : teamIndex === firstServe ? 1 : index,
+    })),
   })),
   scores: [0, 0],
   displayOrder: [0, 1],
-  serveSide: 0,
-  firstServe: 0,
+  serveSide: firstServe,
+  firstServe,
   rallies: [],
   winner: null,
 })
@@ -118,10 +411,13 @@ const createTournamentBracket = (entrants) => {
 }
 
 const rallyOutcomes = [
+  { label: 'Serve point', kind: 'winner' },
+  { label: 'Miracle point', kind: 'winner' },
   { label: 'Shot point', kind: 'winner' },
   { label: 'Drop point', kind: 'winner' },
   { label: 'Serve net', kind: 'error' },
   { label: 'Serve out', kind: 'error' },
+  { label: 'Smash net', kind: 'error' },
   { label: 'Smash out', kind: 'error' },
 ]
 
@@ -133,17 +429,21 @@ function App() {
   const [tournamentTeamCount, setTournamentTeamCount] = useState('8')
   const [tournamentTeams, setTournamentTeams] = useState(createTournamentTeams)
   const [openingServe, setOpeningServe] = useState(0)
+  const [openingServerIndex, setOpeningServerIndex] = useState(0)
   const [match, setMatch] = useState(null)
   const [tournament, setTournament] = useState(null)
   const [undoStack, setUndoStack] = useState([])
   const [pointEntry, setPointEntry] = useState(null)
+  const [postCopied, setPostCopied] = useState(false)
+  const [postCopyFailed, setPostCopyFailed] = useState(false)
+  const [downloadStatus, setDownloadStatus] = useState('')
 
   const playersPerSide = format === 'singles' ? 1 : 2
 
   const startGame = (gameTeams, gameFormat, gameTarget, tournamentRef = null) => {
     setUndoStack([])
     setPointEntry(null)
-    setMatch(createGame(gameTeams, gameFormat, gameTarget, tournamentRef))
+    setMatch(createGame(gameTeams, gameFormat, gameTarget, tournamentRef, openingServe, openingServerIndex))
   }
 
   const updateTeam = (teamIndex, updates) => {
@@ -231,9 +531,7 @@ function App() {
       ...team,
       players: team.players.slice(0, playersPerSide),
     }))
-    const game = createGame(matchTeams, format, Number(target))
-    game.serveSide = openingServe
-    game.firstServe = openingServe
+    const game = createGame(matchTeams, format, Number(target), null, openingServe, openingServerIndex)
     setUndoStack([])
     setMatch(game)
   }
@@ -367,6 +665,95 @@ function App() {
     setPointEntry(null)
   }
 
+  const copyResultPost = async () => {
+    const winningTeam = match.teams[match.winner]
+    const losingTeam = match.teams[1 - match.winner]
+    const roundLabel = currentTournamentRound ? `${currentTournamentRound.name} · ` : ''
+    const post = [
+      'MBA Shuttle Match Desk · Match result',
+      `${roundLabel}${match.format === 'singles' ? 'Singles' : 'Doubles'}`,
+      `${winningTeam.name} ${match.scores[match.winner]} - ${match.scores[1 - match.winner]} ${losingTeam.name}`,
+      `${winningTeam.name} takes the win!`,
+    ].join('\n')
+
+    let copied = false
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(post)
+        copied = true
+      }
+    } catch {
+      copied = false
+    }
+
+    if (!copied) {
+      const temporaryInput = document.createElement('textarea')
+      temporaryInput.value = post
+      temporaryInput.setAttribute('readonly', '')
+      temporaryInput.style.position = 'fixed'
+      temporaryInput.style.opacity = '0'
+      document.body.appendChild(temporaryInput)
+      temporaryInput.select()
+
+      try {
+        copied = document.execCommand('copy')
+      } catch {
+        copied = false
+      } finally {
+        temporaryInput.remove()
+      }
+    }
+
+    if (copied) {
+      setPostCopied(true)
+      setPostCopyFailed(false)
+      window.setTimeout(() => setPostCopied(false), 2200)
+    } else {
+      setPostCopied(false)
+      setPostCopyFailed(true)
+      window.setTimeout(() => setPostCopyFailed(false), 3000)
+    }
+  }
+
+  const downloadPdf = async (canvases, filenameSuffix, successMessage) => {
+    try {
+      const jpegBlobs = await Promise.all(canvases.map((canvas) =>
+        new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.94)),
+      ))
+      if (jpegBlobs.some((blob) => !blob)) throw new Error('Could not render the match log')
+      const jpegPages = await Promise.all(jpegBlobs.map(async (blob) =>
+        new Uint8Array(await blob.arrayBuffer()),
+      ))
+      const fileBlob = encodePdfFromJpegs(jpegPages)
+      const safeWinner = match.teams[match.winner].name.trim().replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'winner'
+      const downloadUrl = URL.createObjectURL(fileBlob)
+      const downloadLink = document.createElement('a')
+      downloadLink.href = downloadUrl
+      downloadLink.download = `shuttle-match-${safeWinner}-${filenameSuffix}.pdf`
+      document.body.appendChild(downloadLink)
+      downloadLink.click()
+      downloadLink.remove()
+      URL.revokeObjectURL(downloadUrl)
+      setDownloadStatus(successMessage)
+      window.setTimeout(() => setDownloadStatus(''), 2500)
+    } catch {
+      setDownloadStatus('Download failed. Please try again.')
+    }
+  }
+
+  const downloadResultTemplate = () => downloadPdf(
+    [createResultCardCanvas(match, currentTournamentRound?.name)],
+    'result-template',
+    'Result template PDF downloaded',
+  )
+
+  const downloadGameLog = () => downloadPdf(
+    [...createRallyLogCanvases(match), createPlayerPerformanceCanvas(match)],
+    'game-log',
+    'Game log PDF downloaded',
+  )
+
   const undoPoint = () => {
     if (!undoStack.length) return
     const previousMatch = undoStack[undoStack.length - 1]
@@ -407,21 +794,7 @@ function App() {
     return team.players.find((player) => player.court === requiredCourt)
   }
 
-  const getPlayerPerformance = (side, playerIndex) => {
-    const pointsWon = match.rallies.filter((rally) =>
-      rally.team === side &&
-      rally.detail?.playerSide === side &&
-      rally.detail.playerIndex === playerIndex &&
-      rally.detail.outcomeKind === 'winner',
-    ).length
-    const totalGamePoints = match.rallies.length
-
-    return {
-      percentage: totalGamePoints ? Math.round((pointsWon / totalGamePoints) * 100) : 0,
-      pointsWon,
-      totalGamePoints,
-    }
-  }
+  const getPlayerPerformance = (side, playerIndex) => calculatePlayerPerformance(match, side, playerIndex)
 
   const returnToSetup = () => {
     if (match?.tournamentRef) {
@@ -518,6 +891,9 @@ function App() {
     const tournamentPreview = isTournamentSetup
       ? createTournamentBracket(tournamentTeams.slice(0, previewTeamCount))
       : null
+    const openingServeTeams = isTournamentSetup
+      ? tournamentPreview.rounds[0].matches.find((entry) => !entry.isBye)?.sides
+      : teams
 
     return (
       <main className="page-shell setup-shell">
@@ -566,7 +942,10 @@ function App() {
                   key={option}
                   type="button"
                   aria-pressed={format === option}
-                  onClick={() => setFormat(option)}
+                  onClick={() => {
+                    setFormat(option)
+                    setOpeningServerIndex(0)
+                  }}
                 >
                   <span className="format-icon" aria-hidden="true">{option === 'singles' ? '1v1' : '2v2'}</span>
                   <span>{option[0].toUpperCase() + option.slice(1)}</span>
@@ -702,17 +1081,33 @@ function App() {
               ))}
             </div>
 
-            {isTournamentSetup ? (
-              <p className="target-note">{previewTeamCount} teams play a single-elimination bracket.</p>
-            ) : (
-              <>
-                <label className="serve-select-label" htmlFor="opening-serve">First serve</label>
-                <select id="opening-serve" value={openingServe} onChange={(event) => setOpeningServe(Number(event.target.value))}>
-                  <option value={0}>{teams[0].name || 'Home side'}</option>
-                  <option value={1}>{teams[1].name || 'Away side'}</option>
-                </select>
-              </>
-            )}
+            {isTournamentSetup && <p className="target-note">{previewTeamCount} teams play a single-elimination bracket.</p>}
+
+            <label className="serve-select-label" htmlFor="opening-serve">First serving side</label>
+            <select
+              id="opening-serve"
+              value={openingServe}
+              onChange={(event) => {
+                setOpeningServe(Number(event.target.value))
+                setOpeningServerIndex(0)
+              }}
+            >
+              {openingServeTeams.map((team, index) => (
+                <option value={index} key={team.id ?? index}>{team.name || `Side ${index + 1}`}</option>
+              ))}
+            </select>
+            <label className="serve-select-label server-player-label" htmlFor="opening-server-player">
+              First server{format === 'doubles' ? ' (starts on right court)' : ''}
+            </label>
+            <select
+              id="opening-server-player"
+              value={openingServerIndex}
+              onChange={(event) => setOpeningServerIndex(Number(event.target.value))}
+            >
+              {openingServeTeams[openingServe].players.slice(0, playersPerSide).map((player, index) => (
+                <option value={index} key={index}>{player.name || `Player ${index + 1}`}</option>
+              ))}
+            </select>
 
             {!isTournamentSetup && (
               <p className="target-note">
@@ -771,17 +1166,44 @@ function App() {
       </header>
 
       {match.winner !== null && (
-        <div className="winner-banner" role="status">
-          <div>
-            <span>{match.tournamentRef ? 'Match complete' : 'Game complete'}</span>
-            <strong>{match.teams[match.winner].name} wins</strong>
+        <section className="victory-panel" aria-labelledby="victory-title">
+          <div className="victory-heading">
+            <span className="victory-mark" aria-hidden="true">W</span>
+            <div>
+              <p className="eyebrow">{match.tournamentRef ? `${currentTournamentRound?.name ?? 'Tournament'} · result` : 'Final result'}</p>
+              <h2 id="victory-title">{match.teams[match.winner].name} wins</h2>
+            </div>
+            <span className="victory-label">Victory</span>
           </div>
+          <div className="victory-result-line">
+            <strong>{match.teams[match.winner].name}</strong>
+            <span>{match.scores[match.winner]} - {match.scores[1 - match.winner]}</span>
+            <strong>{match.teams[1 - match.winner].name}</strong>
+            <small>{match.format === 'singles' ? 'Singles' : 'Doubles'} · {match.target} game point</small>
+          </div>
+          <div className="result-post-row">
+            <p className="result-post-template">
+              MBA Shuttle Match Desk: {match.teams[match.winner].name} wins {match.format} {match.scores[match.winner]}–{match.scores[1 - match.winner]} against {match.teams[1 - match.winner].name}!
+            </p>
+            <div className="result-actions">
+              <button className="copy-post-button" type="button" onClick={copyResultPost}>
+                {postCopied ? 'Copied' : postCopyFailed ? 'Select post to copy' : 'Copy post'}
+              </button>
+              <button className="download-result-button" type="button" onClick={downloadResultTemplate}>
+                Download result template PDF
+              </button>
+              <button className="download-result-button" type="button" onClick={downloadGameLog}>
+                Download game log PDF
+              </button>
+            </div>
+          </div>
+          <p className="result-download-status" aria-live="polite">{downloadStatus}</p>
           {match.tournamentRef && (
             <button className="winner-continue-button" type="button" onClick={advanceTournament}>
               Record result &amp; continue <span aria-hidden="true">-&gt;</span>
             </button>
           )}
-        </div>
+        </section>
       )}
 
       <section className="scoreboard" aria-label="Badminton scoreboard">
@@ -829,7 +1251,7 @@ function App() {
                       </button>
                       <div
                         className="performance-meter"
-                        aria-label={`${player.name || 'Unnamed player'} game performance: ${performance.percentage} percent, ${performance.pointsWon} points won out of ${performance.totalGamePoints} total game points`}
+                        aria-label={`${player.name || 'Unnamed player'} game performance: ${performance.percentage} percent, ${performance.pointsWon} points won, ${performance.pointsMissed} points missed, ${performance.totalGamePoints} total game points`}
                       >
                         <div className="performance-heading">
                           <span>Game performance</span>
@@ -839,7 +1261,7 @@ function App() {
                           <span style={{ width: `${performance.percentage}%` }} />
                         </div>
                         <span className="performance-count">
-                          {performance.pointsWon} points won / {performance.totalGamePoints} played
+                          {performance.pointsWon} won · {performance.pointsMissed} missed / {performance.totalGamePoints} game points
                         </span>
                       </div>
                       {isPlayerServing && <span className="server-chip">Serve</span>}
