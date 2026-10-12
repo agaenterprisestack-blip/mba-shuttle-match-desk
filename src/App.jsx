@@ -18,6 +18,96 @@ const createTeams = () => [
   },
 ]
 
+const createTournamentTeam = (index) => ({
+  id: `entrant-${index + 1}`,
+  name: `Side ${index + 1}`,
+  players: [
+    { name: `Player ${index * 2 + 1}`, image: '' },
+    { name: `Player ${index * 2 + 2}`, image: '' },
+  ],
+})
+
+const createTournamentTeams = (count = 8) => Array.from({ length: count }, (_, index) => createTournamentTeam(index))
+
+const createGame = (teams, format, target, tournamentRef = null) => ({
+  format,
+  target,
+  tournamentRef,
+  teams: teams.map((team) => ({
+    ...team,
+    players: team.players.map((player, index) => ({ ...player, court: index })),
+  })),
+  scores: [0, 0],
+  displayOrder: [0, 1],
+  serveSide: 0,
+  firstServe: 0,
+  rallies: [],
+  winner: null,
+})
+
+const getRoundName = (teamCount, hasByes = false) => {
+  if (teamCount === 4 && hasByes) return 'Qualifying round'
+  if (teamCount === 2) return 'Final'
+  if (teamCount === 4) return 'Semi-finals'
+  if (teamCount === 8) return 'Quarter-finals'
+  return `Round of ${teamCount}`
+}
+
+const getMatchLabel = (roundName, matchIndex) => {
+  if (roundName === 'Final') return 'Final'
+  if (roundName === 'Semi-finals') return `Semi-final ${matchIndex + 1}`
+  if (roundName === 'Quarter-finals') return `Quarter-final ${matchIndex + 1}`
+  return `${roundName} · Match ${matchIndex + 1}`
+}
+
+const createTournamentBracket = (entrants) => {
+  const rounds = []
+  const bracketSize = 2 ** Math.ceil(Math.log2(entrants.length))
+  const byeCount = bracketSize - entrants.length
+  let teamCount = bracketSize
+  let previousRoundMatches = null
+
+  while (teamCount > 1) {
+    const hasOpeningByes = rounds.length === 0 && byeCount > 0
+    const roundName = getRoundName(teamCount, hasOpeningByes)
+    const key = `round-${rounds.length + 1}`
+    const matches = Array.from({ length: teamCount / 2 }, (_, index) => {
+      const isBye = hasOpeningByes && index < byeCount
+      const sides = previousRoundMatches
+        ? null
+        : isBye
+          ? [entrants[index], null]
+          : [
+              entrants[byeCount + (index - byeCount) * 2],
+              entrants[byeCount + (index - byeCount) * 2 + 1],
+            ]
+
+      return {
+        id: `${key}-match-${index + 1}`,
+        label: getMatchLabel(roundName, index),
+        sides,
+        sources: previousRoundMatches
+          ? [previousRoundMatches[index * 2].id, previousRoundMatches[index * 2 + 1].id]
+          : null,
+        winnerTeam: isBye ? sides[0] : null,
+        score: null,
+        isBye,
+      }
+    })
+
+    rounds.push({ key, name: roundName, matches })
+    previousRoundMatches = matches
+    teamCount = matches.length
+  }
+
+  return {
+    rounds,
+    teamCount: entrants.length,
+    champion: null,
+    activeGame: null,
+  }
+}
+
 const rallyOutcomes = [
   { label: 'Shot point', kind: 'winner' },
   { label: 'Drop point', kind: 'winner' },
@@ -27,15 +117,25 @@ const rallyOutcomes = [
 ]
 
 function App() {
+  const [setupMode, setSetupMode] = useState('match')
   const [format, setFormat] = useState('doubles')
   const [target, setTarget] = useState(21)
   const [teams, setTeams] = useState(createTeams)
+  const [tournamentTeamCount, setTournamentTeamCount] = useState('8')
+  const [tournamentTeams, setTournamentTeams] = useState(createTournamentTeams)
   const [openingServe, setOpeningServe] = useState(0)
   const [match, setMatch] = useState(null)
+  const [tournament, setTournament] = useState(null)
   const [undoStack, setUndoStack] = useState([])
   const [pointEntry, setPointEntry] = useState(null)
 
   const playersPerSide = format === 'singles' ? 1 : 2
+
+  const startGame = (gameTeams, gameFormat, gameTarget, tournamentRef = null) => {
+    setUndoStack([])
+    setPointEntry(null)
+    setMatch(createGame(gameTeams, gameFormat, gameTarget, tournamentRef))
+  }
 
   const updateTeam = (teamIndex, updates) => {
     setTeams((current) => current.map((team, index) =>
@@ -65,26 +165,150 @@ function App() {
     event.target.value = ''
   }
 
+  const updateTournamentTeam = (teamIndex, updates) => {
+    setTournamentTeams((current) => current.map((team, index) =>
+      index === teamIndex ? { ...team, ...updates } : team,
+    ))
+  }
+
+  const changeTournamentTeamCount = (value) => {
+    setTournamentTeamCount(value)
+    const count = Number(value)
+    if (!Number.isInteger(count) || count < 2 || count > 32) return
+
+    setTournamentTeams((current) => Array.from({ length: Math.max(count, current.length) }, (_, index) =>
+      current[index] ?? createTournamentTeam(index),
+    ))
+  }
+
+  const normalizeTournamentTeamCount = () => {
+    const count = Number(tournamentTeamCount)
+    const normalizedCount = Number.isFinite(count)
+      ? Math.min(32, Math.max(2, Math.trunc(count)))
+      : 8
+    setTournamentTeamCount(String(normalizedCount))
+    setTournamentTeams((current) => Array.from({ length: Math.max(normalizedCount, current.length) }, (_, index) =>
+      current[index] ?? createTournamentTeam(index),
+    ))
+    return normalizedCount
+  }
+
+  const updateTournamentPlayer = (teamIndex, playerIndex, updates) => {
+    setTournamentTeams((current) => current.map((team, index) => {
+      if (index !== teamIndex) return team
+      return {
+        ...team,
+        players: team.players.map((player, slot) =>
+          slot === playerIndex ? { ...player, ...updates } : player,
+        ),
+      }
+    }))
+  }
+
+  const handleTournamentPhoto = (event, teamIndex, playerIndex) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = () => updateTournamentPlayer(teamIndex, playerIndex, { image: reader.result })
+    reader.readAsDataURL(file)
+    event.target.value = ''
+  }
+
   const startMatch = (event) => {
     event.preventDefault()
+    setTournament(null)
+    const matchTeams = teams.map((team) => ({
+      ...team,
+      players: team.players.slice(0, playersPerSide),
+    }))
+    const game = createGame(matchTeams, format, Number(target))
+    game.serveSide = openingServe
+    game.firstServe = openingServe
     setUndoStack([])
-    setMatch({
-      format,
-      target: Number(target),
-      displayOrder: [0, 1],
-      teams: teams.map((team) => ({
-        ...team,
-        players: team.players.slice(0, playersPerSide).map((player, index) => ({
-          ...player,
-          court: index,
-        })),
-      })),
-      scores: [0, 0],
-      serveSide: openingServe,
-      firstServe: openingServe,
-      rallies: [],
-      winner: null,
-    })
+    setMatch(game)
+  }
+
+  const startTournament = (event) => {
+    event.preventDefault()
+    const entrantCount = normalizeTournamentTeamCount()
+    const entrants = tournamentTeams.map((team) => ({
+      ...team,
+      players: team.players.slice(0, playersPerSide),
+    })).slice(0, entrantCount)
+    const bracket = createTournamentBracket(entrants)
+    setTournament({ ...bracket, format, target: Number(target) })
+    const firstRound = bracket.rounds[0]
+    const firstMatch = firstRound.matches.find((entry) => !entry.winnerTeam && entry.sides?.every(Boolean))
+    if (!firstMatch) return
+    startGame(firstMatch.sides, format, Number(target), { roundKey: firstRound.key, matchId: firstMatch.id })
+  }
+
+  const startBracketMatch = (roundKey, tournamentMatch) => {
+    if (!tournamentMatch?.sides) return
+    setTournament((current) => ({ ...current, activeGame: null }))
+    startGame(tournamentMatch.sides, tournament.format, tournament.target, { roundKey, matchId: tournamentMatch.id })
+  }
+
+  const resumeTournamentGame = () => {
+    if (!tournament?.activeGame) return
+    setMatch(tournament.activeGame)
+    setUndoStack(tournament.activeUndoStack ?? [])
+    setTournament((current) => ({ ...current, activeGame: null, activeUndoStack: null }))
+  }
+
+  const showTournamentBracket = () => {
+    if (!tournament || !match?.tournamentRef) return
+    setTournament((current) => ({ ...current, activeGame: match, activeUndoStack: undoStack }))
+    setMatch(null)
+    setPointEntry(null)
+  }
+
+  const advanceTournament = () => {
+    if (!tournament || !match?.tournamentRef || match.winner === null) return
+
+    const completedTeam = match.teams[match.winner]
+    const updatedRounds = tournament.rounds.map((round) => ({
+      ...round,
+      matches: round.matches.map((entry) => entry.id === match.tournamentRef.matchId
+        ? { ...entry, winnerTeam: completedTeam, score: [...match.scores] }
+        : { ...entry }),
+    }))
+
+    for (let roundIndex = 1; roundIndex < updatedRounds.length; roundIndex += 1) {
+      const previousMatches = updatedRounds[roundIndex - 1].matches
+      updatedRounds[roundIndex].matches = updatedRounds[roundIndex].matches.map((entry) => {
+        if (!entry.sources) return entry
+        const sides = entry.sources.map((sourceId) =>
+          previousMatches.find((previous) => previous.id === sourceId)?.winnerTeam ?? null,
+        )
+        return { ...entry, sides: sides.every(Boolean) ? sides : null }
+      })
+    }
+
+    const nextMatch = updatedRounds
+      .flatMap((round) => round.matches.map((entry) => ({ roundKey: round.key, entry })))
+      .find(({ entry }) => !entry.winnerTeam && entry.sides?.every(Boolean))
+
+    const finalMatch = updatedRounds[updatedRounds.length - 1].matches[0]
+    const updatedTournament = {
+      ...tournament,
+      rounds: updatedRounds,
+      champion: finalMatch.winnerTeam,
+      activeGame: null,
+    }
+
+    setTournament(updatedTournament)
+    setMatch(null)
+    setUndoStack([])
+    setPointEntry(null)
+
+    if (nextMatch) {
+      startGame(nextMatch.entry.sides, tournament.format, tournament.target, {
+        roundKey: nextMatch.roundKey,
+        matchId: nextMatch.entry.id,
+      })
+    }
   }
 
   const scorePoint = (teamIndex, detail = null) => {
@@ -191,11 +415,101 @@ function App() {
   }
 
   const returnToSetup = () => {
+    if (match?.tournamentRef) {
+      showTournamentBracket()
+      return
+    }
     setMatch(null)
     setUndoStack([])
   }
 
+  if (!match && tournament) {
+    return (
+      <main className="page-shell bracket-shell">
+        <header className="masthead">
+          <div className="brand-mark" aria-hidden="true">S</div>
+          <div>
+            <p className="eyebrow">MBA / tournament desk</p>
+            <h1>Knockout bracket</h1>
+          </div>
+          <button className="text-button" type="button" onClick={() => {
+            setTournament(null)
+            setMatch(null)
+          }}>New setup</button>
+        </header>
+
+        {tournament.champion && (
+          <div className="champion-banner" role="status">
+            <span>Tournament champion</span>
+            <strong>{tournament.champion.name}</strong>
+          </div>
+        )}
+
+        {tournament.activeGame && (
+          <button className="resume-game-button" type="button" onClick={resumeTournamentGame}>
+            Resume in-progress game <span aria-hidden="true">-&gt;</span>
+          </button>
+        )}
+
+        <section className="bracket-grid" aria-label="Tournament bracket">
+          {tournament.rounds.map((round) => (
+            <section className="bracket-round" key={round.key}>
+              <div className="bracket-round-heading">
+                <p className="eyebrow">{round.matches.length} {round.matches.length === 1 ? 'match' : 'matches'}</p>
+                <h2>{round.name}</h2>
+              </div>
+              <div className="bracket-matches">
+                {round.matches.map((entry) => {
+                  const showResume = tournament.activeGame?.tournamentRef?.matchId === entry.id
+                  const playable = !tournament.activeGame && entry.sides?.every(Boolean) && !entry.winnerTeam
+                  return (
+                    <article className={`bracket-match ${entry.winnerTeam ? 'complete' : ''}`} key={entry.id}>
+                      <p className="bracket-match-title">{entry.label}</p>
+                      {entry.sides ? entry.sides.map((side, sideIndex) => (
+                        <div className={`bracket-side ${side && entry.winnerTeam?.id === side.id ? 'bracket-winner' : ''} ${!side ? 'bracket-bye' : ''}`} key={`${entry.id}-${sideIndex}`}>
+                          <span>{side?.name ?? 'BYE · advances automatically'}</span>
+                          {entry.score && <strong>{entry.score[sideIndex]}</strong>}
+                        </div>
+                      )) : entry.sources?.map((source, sourceIndex) => (
+                        <div className="bracket-side pending" key={source}>
+                          <span>Winner {source.toUpperCase()}</span>
+                          {sourceIndex === 0 && <small>vs</small>}
+                        </div>
+                      ))}
+                      {playable && !showResume && (
+                        <button className="bracket-play-button" type="button" onClick={() => startBracketMatch(round.key, entry)}>
+                          Play match <span aria-hidden="true">-&gt;</span>
+                        </button>
+                      )}
+                      {showResume && (
+                        <button className="bracket-play-button" type="button" onClick={resumeTournamentGame}>
+                          Resume match <span aria-hidden="true">-&gt;</span>
+                        </button>
+                      )}
+                    </article>
+                  )
+                })}
+              </div>
+            </section>
+          ))}
+        </section>
+      </main>
+    )
+  }
+
   if (!match) {
+    const isTournamentSetup = setupMode === 'tournament'
+    const setupTeams = isTournamentSetup ? tournamentTeams : teams
+    const setSetupTeam = isTournamentSetup ? updateTournamentTeam : updateTeam
+    const setSetupPlayer = isTournamentSetup ? updateTournamentPlayer : updatePlayer
+    const parsedTeamCount = Number(tournamentTeamCount)
+    const previewTeamCount = Number.isInteger(parsedTeamCount) && parsedTeamCount >= 2 && parsedTeamCount <= 32
+      ? parsedTeamCount
+      : 2
+    const tournamentPreview = isTournamentSetup
+      ? createTournamentBracket(tournamentTeams.slice(0, previewTeamCount))
+      : null
+
     return (
       <main className="page-shell setup-shell">
         <header className="masthead">
@@ -207,13 +521,32 @@ function App() {
           <span className="status-tag">Ready to play</span>
         </header>
 
-        <form className="setup-layout" onSubmit={startMatch}>
+        <div className="mode-switch" role="group" aria-label="Game mode">
+          {[
+            { key: 'match', label: 'Single match' },
+            { key: 'tournament', label: 'Tournament' },
+          ].map((mode) => (
+            <button
+              className={setupMode === mode.key ? 'mode-option active' : 'mode-option'}
+              type="button"
+              key={mode.key}
+              aria-pressed={setupMode === mode.key}
+              onClick={() => {
+                setSetupMode(mode.key)
+              }}
+            >
+              {mode.label}
+            </button>
+          ))}
+        </div>
+
+        <form className="setup-layout" onSubmit={isTournamentSetup ? startTournament : startMatch}>
           <section className="setup-main">
             <div className="section-heading">
               <span className="step-number">01</span>
               <div>
                 <h2>Match format</h2>
-                <p>Choose how many players are on each side.</p>
+                <p>{isTournamentSetup ? 'Choose the format for all tournament games.' : 'Choose how many players are on each side.'}</p>
               </div>
             </div>
 
@@ -235,20 +568,20 @@ function App() {
             <div className="section-heading players-heading">
               <span className="step-number">02</span>
               <div>
-                <h2>Players</h2>
-                <p>Add a name and photo for each player.</p>
+                <h2>{isTournamentSetup ? 'Tournament entrants' : 'Players'}</h2>
+                <p>{isTournamentSetup ? `Enter the ${previewTeamCount} teams below. Pairings use the numbered schedule slots.` : 'Add a name and photo for each player.'}</p>
               </div>
             </div>
 
             <div className="team-setup-grid">
-              {teams.map((team, teamIndex) => (
+              {setupTeams.slice(0, isTournamentSetup ? previewTeamCount : 2).map((team, teamIndex) => (
                 <section className={`team-setup team-${teamIndex}`} key={teamIndex}>
                   <label className="team-name-label">
                     <span className="team-dot" />
                     <input
                       aria-label={`Side ${teamIndex + 1} name`}
                       value={team.name}
-                      onChange={(event) => updateTeam(teamIndex, { name: event.target.value })}
+                      onChange={(event) => setSetupTeam(teamIndex, { name: event.target.value })}
                     />
                   </label>
                   <div className="setup-player-list">
@@ -265,7 +598,9 @@ function App() {
                             type="file"
                             accept="image/*"
                             aria-label={`Choose photo for ${player.name}`}
-                            onChange={(event) => handlePhoto(event, teamIndex, playerIndex)}
+                            onChange={(event) => isTournamentSetup
+                              ? handleTournamentPhoto(event, teamIndex, playerIndex)
+                              : handlePhoto(event, teamIndex, playerIndex)}
                           />
                         </label>
                         <label className="player-name-label">
@@ -273,7 +608,7 @@ function App() {
                           <input
                             value={player.name}
                             maxLength={32}
-                            onChange={(event) => updatePlayer(teamIndex, playerIndex, { name: event.target.value })}
+                            onChange={(event) => setSetupPlayer(teamIndex, playerIndex, { name: event.target.value })}
                             aria-label={`Side ${teamIndex + 1} player ${playerIndex + 1} name`}
                           />
                         </label>
@@ -283,11 +618,60 @@ function App() {
                 </section>
               ))}
             </div>
+
+            {isTournamentSetup && (
+              <section className="schedule-preview" aria-label="Tournament schedule slots">
+                <div className="section-heading schedule-heading">
+                  <span className="step-number">04</span>
+                  <div>
+                    <h2>Opening round schedule</h2>
+                    <p>Teams are paired by slot. Winners advance to the next round.</p>
+                  </div>
+                </div>
+                <div className="schedule-slots">
+                  {tournamentPreview.rounds[0].matches.map((entry, index) => (
+                    <div className="schedule-slot" key={entry.id}>
+                      <span className="slot-number">Slot {String(index + 1).padStart(2, '0')}</span>
+                      <strong>{entry.sides[0]?.name ?? 'BYE · automatic advance'}</strong>
+                      <span className="slot-vs">vs</span>
+                      <strong>{entry.sides[1]?.name ?? 'BYE · automatic advance'}</strong>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
           </section>
 
           <aside className="setup-aside">
+            {isTournamentSetup && (
+              <>
+                <div className="section-heading compact-heading">
+                  <span className="step-number">01</span>
+                  <div>
+                    <h2>Number of teams</h2>
+                    <p>Choose the bracket size.</p>
+                  </div>
+                </div>
+                <label className="team-count-field" htmlFor="tournament-team-count">
+                  <span>Teams in tournament</span>
+                  <input
+                    id="tournament-team-count"
+                    type="number"
+                    min="2"
+                    max="32"
+                    step="1"
+                    required
+                    value={tournamentTeamCount}
+                    onChange={(event) => changeTournamentTeamCount(event.target.value)}
+                    onBlur={normalizeTournamentTeamCount}
+                    aria-describedby="team-count-note"
+                  />
+                  <small id="team-count-note">Choose 2 to 32 teams. Empty bracket slots advance as byes.</small>
+                </label>
+              </>
+            )}
             <div className="section-heading compact-heading">
-              <span className="step-number">03</span>
+              <span className="step-number">{isTournamentSetup ? '02' : '03'}</span>
               <div>
                 <h2>Game points</h2>
                 <p>Set the winning score before play starts.</p>
@@ -308,15 +692,21 @@ function App() {
               ))}
             </div>
 
-            <label className="serve-select-label" htmlFor="opening-serve">First serve</label>
-            <select id="opening-serve" value={openingServe} onChange={(event) => setOpeningServe(Number(event.target.value))}>
-              <option value={0}>{teams[0].name || 'Home side'}</option>
-              <option value={1}>{teams[1].name || 'Away side'}</option>
-            </select>
+            {isTournamentSetup ? (
+              <p className="target-note">{previewTeamCount} teams play a single-elimination bracket.</p>
+            ) : (
+              <>
+                <label className="serve-select-label" htmlFor="opening-serve">First serve</label>
+                <select id="opening-serve" value={openingServe} onChange={(event) => setOpeningServe(Number(event.target.value))}>
+                  <option value={0}>{teams[0].name || 'Home side'}</option>
+                  <option value={1}>{teams[1].name || 'Away side'}</option>
+                </select>
+              </>
+            )}
 
-            <p className="target-note">First side to {target} wins the game.</p>
+            {!isTournamentSetup && <p className="target-note">First side to {target} wins the game.</p>}
             <button className="start-button" type="submit">
-              Start match <span aria-hidden="true">-&gt;</span>
+              {isTournamentSetup ? 'Start tournament' : 'Start match'} <span aria-hidden="true">-&gt;</span>
             </button>
           </aside>
         </form>
@@ -325,6 +715,12 @@ function App() {
   }
 
   const servingPlayer = getServer(match.serveSide)
+  const currentTournamentRound = match.tournamentRef
+    ? tournament?.rounds.find((round) => round.key === match.tournamentRef.roundKey)
+    : null
+  const currentTournamentFixture = currentTournamentRound?.matches.find(
+    (entry) => entry.id === match.tournamentRef.matchId,
+  )
 
   return (
     <main className="page-shell match-shell">
@@ -332,8 +728,8 @@ function App() {
         <div className="match-title">
           <div className="brand-mark" aria-hidden="true">S</div>
           <div>
-            <p className="eyebrow">MBA / live match desk</p>
-            <h1>{match.format === 'singles' ? 'Singles' : 'Doubles'} scoreboard</h1>
+            <p className="eyebrow">{currentTournamentRound ? `MBA / ${currentTournamentRound.name}` : 'MBA / live match desk'}</p>
+            <h1>{currentTournamentFixture ? currentTournamentFixture.label : `${match.format === 'singles' ? 'Singles' : 'Doubles'} scoreboard`}</h1>
           </div>
         </div>
         <div className="match-header-actions">
@@ -344,14 +740,23 @@ function App() {
           <button className="reset-button" type="button" onClick={resetMatch} title="Reset score and point log">
             <span aria-hidden="true">&#8635;</span> Reset game
           </button>
-          <button className="text-button" type="button" onClick={returnToSetup}>Edit setup</button>
+          <button className="text-button" type="button" onClick={returnToSetup}>
+            {match.tournamentRef ? 'Bracket' : 'Edit setup'}
+          </button>
         </div>
       </header>
 
       {match.winner !== null && (
         <div className="winner-banner" role="status">
-          <span>Game point</span>
-          <strong>{match.teams[match.winner].name} wins</strong>
+          <div>
+            <span>{match.tournamentRef ? 'Match complete' : 'Game point'}</span>
+            <strong>{match.teams[match.winner].name} wins</strong>
+          </div>
+          {match.tournamentRef && (
+            <button className="winner-continue-button" type="button" onClick={advanceTournament}>
+              Record result &amp; continue <span aria-hidden="true">-&gt;</span>
+            </button>
+          )}
         </div>
       )}
 
