@@ -60,6 +60,15 @@ const getMatchLabel = (roundName, matchIndex) => {
   return `${roundName} · Match ${matchIndex + 1}`
 }
 
+const getGameWinner = (scores, gamePoint) => {
+  const leadingSide = scores[0] === scores[1] ? null : scores[0] > scores[1] ? 0 : 1
+  const highScore = Math.max(...scores)
+
+  if (highScore >= 30) return leadingSide
+  if (leadingSide === null || highScore < gamePoint + 1) return null
+  return scores[leadingSide] - scores[1 - leadingSide] >= 2 ? leadingSide : null
+}
+
 const createTournamentBracket = (entrants) => {
   const rounds = []
   const bracketSize = 2 ** Math.ceil(Math.log2(entrants.length))
@@ -338,7 +347,7 @@ function App() {
         scores,
         serveSide: teamIndex,
         rallies,
-        winner: scores[teamIndex] >= current.target ? teamIndex : null,
+        winner: getGameWinner(scores, current.target),
       }
     })
   }
@@ -597,6 +606,7 @@ function App() {
                           <input
                             type="file"
                             accept="image/*"
+                            capture="environment"
                             aria-label={`Choose photo for ${player.name}`}
                             onChange={(event) => isTournamentSetup
                               ? handleTournamentPhoto(event, teamIndex, playerIndex)
@@ -673,11 +683,11 @@ function App() {
             <div className="section-heading compact-heading">
               <span className="step-number">{isTournamentSetup ? '02' : '03'}</span>
               <div>
-                <h2>Game points</h2>
-                <p>Set the winning score before play starts.</p>
+                <h2>Game point</h2>
+                <p>Choose the score that starts game point.</p>
               </div>
             </div>
-            <div className="target-options" role="group" aria-label="Points to win">
+            <div className="target-options" role="group" aria-label="Game point threshold">
               {[20, 21].map((points) => (
                 <button
                   type="button"
@@ -687,7 +697,7 @@ function App() {
                   onClick={() => setTarget(points)}
                 >
                   <strong>{points}</strong>
-                  <span>points</span>
+                  <span>game point</span>
                 </button>
               ))}
             </div>
@@ -704,7 +714,11 @@ function App() {
               </>
             )}
 
-            {!isTournamentSetup && <p className="target-note">First side to {target} wins the game.</p>}
+            {!isTournamentSetup && (
+              <p className="target-note">
+                Reach {Number(target) + 1} and lead by 2 to win. At {target}-{target}, {Number(target) + 2} wins.
+              </p>
+            )}
             <button className="start-button" type="submit">
               {isTournamentSetup ? 'Start tournament' : 'Start match'} <span aria-hidden="true">-&gt;</span>
             </button>
@@ -733,7 +747,17 @@ function App() {
           </div>
         </div>
         <div className="match-header-actions">
-          <span className="status-tag">{match.winner === null ? `First to ${match.target}` : 'Game complete'}</span>
+          <span className="status-tag">
+            {match.winner !== null
+              ? 'Game complete'
+              : match.scores[0] === match.scores[1] && match.scores[0] >= 29
+                ? '30-point cap · next point wins'
+              : match.scores[0] === match.scores[1] && match.scores[0] >= match.target
+                ? 'Deuce · win by 2'
+                : Math.max(...match.scores) >= match.target && Math.abs(match.scores[0] - match.scores[1]) === 1
+                  ? 'Game point · next point wins'
+                  : `Game point ${match.target} · target ${match.target + 1}`}
+          </span>
           <button className="switch-sides-button" type="button" onClick={switchSides} aria-label="Switch sides">
             <span aria-hidden="true">&#8644;</span> Switch sides
           </button>
@@ -749,7 +773,7 @@ function App() {
       {match.winner !== null && (
         <div className="winner-banner" role="status">
           <div>
-            <span>{match.tournamentRef ? 'Match complete' : 'Game point'}</span>
+            <span>{match.tournamentRef ? 'Match complete' : 'Game complete'}</span>
             <strong>{match.teams[match.winner].name} wins</strong>
           </div>
           {match.tournamentRef && (
@@ -770,7 +794,12 @@ function App() {
             <article className={`side-score side-${displayIndex} ${isServing ? 'serving' : ''}`} key={teamIndex}>
               <div className="side-score-top">
                 <span className="side-label">Side 0{displayIndex + 1}</span>
-                {isServing && <span className="serve-indicator">Serving</span>}
+                <span className="side-score-indicators">
+                  {match.scores[teamIndex] >= match.target &&
+                    match.scores[teamIndex] - match.scores[1 - teamIndex] === 1 &&
+                    <span className="game-point-indicator">Game point</span>}
+                  {isServing && <span className="serve-indicator">Serving</span>}
+                </span>
               </div>
               <p className="team-title">{team.name || `Side ${teamIndex + 1}`}</p>
               <div className="score-value" aria-live="polite">{match.scores[teamIndex]}</div>

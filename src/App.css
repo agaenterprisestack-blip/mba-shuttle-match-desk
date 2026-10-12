@@ -613,6 +613,21 @@ h2 {
   min-height: 20px;
 }
 
+.side-score-indicators {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.game-point-indicator {
+  color: #a6532e;
+  font-size: 0.67rem;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
 .side-label {
   color: #6b7d71;
   font-size: 0.72rem;
