@@ -327,7 +327,9 @@ const createGame = (teams, format, target, tournamentRef = null, firstServe = 0,
     ...team,
     players: team.players.map((player, index) => ({
       ...player,
-      court: teamIndex === firstServe && index === serverIndex ? 0 : teamIndex === firstServe ? 1 : index,
+      court: teamIndex === firstServe
+        ? index === serverIndex ? 0 : 1
+        : index === 0 ? 1 : 0,
     })),
   })),
   scores: [0, 0],
@@ -411,12 +413,12 @@ const createTournamentBracket = (entrants) => {
 }
 
 const rallyOutcomes = [
-  { label: 'Serve point', kind: 'winner' },
+  { label: 'Serve point', kind: 'winner', serverOnly: true },
   { label: 'Miracle point', kind: 'winner' },
   { label: 'Shot point', kind: 'winner' },
   { label: 'Drop point', kind: 'winner' },
-  { label: 'Serve net', kind: 'error' },
-  { label: 'Serve out', kind: 'error' },
+  { label: 'Serve net', kind: 'error', serverOnly: true },
+  { label: 'Serve out', kind: 'error', serverOnly: true },
   { label: 'Smash net', kind: 'error' },
   { label: 'Smash out', kind: 'error' },
 ]
@@ -654,6 +656,9 @@ function App() {
     if (!pointEntry) return
 
     const player = match.teams[pointEntry.side].players[pointEntry.playerIndex]
+    const selectedPlayerIsServer = pointEntry.side === match.serveSide && player === getServer(pointEntry.side)
+    if (outcome.serverOnly && !selectedPlayerIsServer) return
+
     const scoringSide = outcome.kind === 'error' ? 1 - pointEntry.side : pointEntry.side
     scorePoint(scoringSide, {
       outcome: outcome.label,
@@ -766,6 +771,19 @@ function App() {
       ...current,
       displayOrder: [current.displayOrder[1], current.displayOrder[0]],
     }))
+  }
+
+  const switchPlayerPositions = (teamIndex) => {
+    setMatch((current) => {
+      if (current.rallies.length > 0) return current
+      return {
+        ...current,
+        teams: current.teams.map((team, index) => index === teamIndex ? {
+          ...team,
+          players: team.players.map((player) => ({ ...player, court: 1 - player.court })),
+        } : team),
+      }
+    })
   }
 
   const resetMatch = () => {
@@ -968,6 +986,7 @@ function App() {
                     <span className="team-dot" />
                     <input
                       aria-label={`Side ${teamIndex + 1} name`}
+                      placeholder={`Enter side ${teamIndex + 1} name`}
                       value={team.name}
                       onChange={(event) => setSetupTeam(teamIndex, { name: event.target.value })}
                     />
@@ -996,6 +1015,7 @@ function App() {
                           <span>Player {playerIndex + 1}</span>
                           <input
                             value={player.name}
+                            placeholder={`Enter player ${playerIndex + 1} name`}
                             maxLength={32}
                             onChange={(event) => setSetupPlayer(teamIndex, playerIndex, { name: event.target.value })}
                             aria-label={`Side ${teamIndex + 1} player ${playerIndex + 1} name`}
@@ -1153,7 +1173,13 @@ function App() {
                   ? 'Game point · next point wins'
                   : `Game point ${match.target} · target ${match.target + 1}`}
           </span>
-          <button className="switch-sides-button" type="button" onClick={switchSides} aria-label="Switch sides">
+          <button
+            className="switch-sides-button"
+            type="button"
+            onClick={switchSides}
+            disabled={match.rallies.length > 0}
+            aria-label="Switch sides"
+          >
             <span aria-hidden="true">&#8644;</span> Switch sides
           </button>
           <button className="reset-button" type="button" onClick={resetMatch} title="Reset score and point log">
@@ -1215,7 +1241,7 @@ function App() {
           return (
             <article className={`side-score side-${displayIndex} ${isServing ? 'serving' : ''}`} key={teamIndex}>
               <div className="side-score-top">
-                <span className="side-label">Side 0{displayIndex + 1}</span>
+                <span className="side-label">{displayIndex === 0 ? 'Left side' : 'Right side'}</span>
                 <span className="side-score-indicators">
                   {match.scores[teamIndex] >= match.target &&
                     match.scores[teamIndex] - match.scores[1 - teamIndex] === 1 &&
@@ -1225,29 +1251,29 @@ function App() {
               </div>
               <p className="team-title">{team.name || `Side ${teamIndex + 1}`}</p>
               <div className="score-value" aria-live="polite">{match.scores[teamIndex]}</div>
-              <div className="player-boxes">
+              <div className={`player-boxes ${match.format === 'doubles' ? 'doubles-player-boxes' : ''}`}>
                 {team.players.map((player, playerIndex) => {
                   const isPlayerServing = activeServer === player
                   const courtLabel = player.court === 0 ? 'Right court' : 'Left court'
                   const performance = getPlayerPerformance(teamIndex, playerIndex)
                   return (
                     <div className={`player-box ${isPlayerServing ? 'player-serving' : ''}`} key={playerIndex}>
-                      {player.image ? (
-                        <img className="player-photo" src={player.image} alt={`${player.name} portrait`} />
-                      ) : (
-                        <div className="player-photo player-placeholder" aria-hidden="true">
-                          {(player.name.trim().charAt(0) || '?').toUpperCase()}
-                        </div>
-                      )}
-                      <span className="player-court">{match.format === 'doubles' ? courtLabel : 'Player'}</span>
                       <button
-                        className="player-name player-name-action"
+                        className="player-profile-action"
                         type="button"
                         onClick={() => setPointEntry({ side: teamIndex, playerIndex })}
                         disabled={match.winner !== null}
                         aria-label={`Record rally outcome for ${player.name || 'Unnamed player'}`}
                       >
-                        {player.name || 'Unnamed player'}
+                        {player.image ? (
+                          <img className="player-photo" src={player.image} alt="" />
+                        ) : (
+                          <span className="player-photo player-placeholder" aria-hidden="true">
+                            {(player.name.trim().charAt(0) || '?').toUpperCase()}
+                          </span>
+                        )}
+                        <span className="player-court">{match.format === 'doubles' ? courtLabel : 'Player'}</span>
+                        <span className="player-name">{player.name || 'Unnamed player'}</span>
                       </button>
                       <div
                         className="performance-meter"
@@ -1268,6 +1294,18 @@ function App() {
                     </div>
                   )
                 })}
+                {match.format === 'doubles' && team.players.length > 1 && (
+                  <button
+                    className="player-position-switch"
+                    type="button"
+                    onClick={() => switchPlayerPositions(teamIndex)}
+                    disabled={match.rallies.length > 0}
+                    title="Switch player positions"
+                    aria-label={`Switch ${team.name || `side ${teamIndex + 1}`} player positions`}
+                  >
+                    <span aria-hidden="true">&#8646;</span>
+                  </button>
+                )}
               </div>
               <button
                 className="point-button"
@@ -1346,7 +1384,12 @@ function App() {
               <button className="dialog-close" type="button" onClick={() => setPointEntry(null)} aria-label="Close outcome picker">×</button>
             </div>
             <div className="outcome-options">
-              {rallyOutcomes.map((outcome) => (
+              {rallyOutcomes
+                .filter((outcome) => !outcome.serverOnly || (
+                  pointEntry.side === match.serveSide &&
+                  match.teams[pointEntry.side].players[pointEntry.playerIndex] === getServer(pointEntry.side)
+                ))
+                .map((outcome) => (
                 <button
                   className={`outcome-option ${outcome.kind}`}
                   type="button"

@@ -678,12 +678,72 @@ h2 {
   padding-top: 13px;
 }
 
+.doubles-player-boxes {
+  grid-template-columns: minmax(0, 1fr) 34px minmax(0, 1fr);
+}
+
+.doubles-player-boxes .player-box:nth-child(2) {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.player-position-switch {
+  display: grid;
+  grid-column: 2;
+  grid-row: 1;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-top: 18px;
+  border: 1px solid rgba(41, 71, 57, 0.24);
+  background: rgba(255, 255, 255, 0.55);
+  color: #34644b;
+  cursor: pointer;
+}
+
+.player-position-switch span {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.player-position-switch:hover:not(:disabled) {
+  background: #fff;
+}
+
+.player-position-switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .player-box {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   min-width: 0;
+}
+
+.player-profile-action {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.player-profile-action:focus-visible {
+  outline: 2px solid #275c42;
+  outline-offset: 3px;
+}
+
+.player-profile-action:disabled {
+  cursor: default;
 }
 
 .player-photo {
@@ -725,6 +785,12 @@ h2 {
   font-size: 0.85rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.player-profile-action:hover:not(:disabled) .player-name {
+  color: #a6532e;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
 }
 
 .player-name-action {
@@ -809,8 +875,54 @@ h2 {
   white-space: nowrap;
 }
 
+.player-serving .player-photo {
+  animation: serving-pulse 1.8s ease-in-out infinite;
+}
+
+.player-serving .server-chip {
+  animation: serving-label 1.8s ease-in-out infinite;
+}
+
+@keyframes serving-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(39, 92, 66, 0.34);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgba(39, 92, 66, 0);
+    transform: scale(1.045);
+  }
+}
+
+@keyframes serving-label {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.62; }
+}
+
 .side-1 .server-chip {
   color: #a6532e;
+}
+
+.side-1 .player-serving .player-photo {
+  animation-name: serving-pulse-away;
+}
+
+@keyframes serving-pulse-away {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(166, 83, 46, 0.34);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgba(166, 83, 46, 0);
+    transform: scale(1.045);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .player-serving .player-photo,
+  .player-serving .server-chip {
+    animation: none;
+  }
 }
 
 .point-button {
