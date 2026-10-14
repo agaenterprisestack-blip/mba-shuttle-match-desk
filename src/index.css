@@ -2,8 +2,8 @@
   font-family: 'Trebuchet MS', 'Aptos', sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  color: #18382c;
-  background: #f3f5ef;
+  color: #202020;
+  background: #fafafa;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -22,6 +22,9 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  background:
+    linear-gradient(rgb(250 250 250 / 94%), rgb(250 250 250 / 94%)),
+    url('./assets/shuttlecock.svg') no-repeat right 60px top 100px / 340px auto;
 }
 
 button,
@@ -34,7 +37,7 @@ select {
 button:focus-visible,
 input:focus-visible,
 select:focus-visible {
-  outline: 3px solid #d17b47;
+  outline: 3px solid #7460a6;
   outline-offset: 3px;
 }
 

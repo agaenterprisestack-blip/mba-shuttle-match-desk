@@ -1,5 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
+import LoginPage from './LoginPage.jsx'
+import shuttlecock from './assets/shuttlecock.svg'
+
+const demoCredentials = {
+  email: 'demo@shuttlematchdesk.com',
+  password: 'ShuttleDemo21',
+}
 
 const createTeams = () => [
   {
@@ -75,11 +82,11 @@ const createResultCardCanvas = (match, roundName) => {
   const formatName = match.format === 'singles' ? 'SINGLES' : 'DOUBLES'
   const playerLine = (team) => team.players.map((player) => player.name.trim() || 'Unnamed player').join('  ·  ')
 
-  context.fillStyle = '#123d30'
+  context.fillStyle = '#171717'
   context.fillRect(0, 0, RESULT_CARD_WIDTH, RESULT_CARD_HEIGHT)
-  context.fillStyle = '#d9ef68'
+  context.fillStyle = '#c6f542'
   context.fillRect(0, 0, RESULT_CARD_WIDTH, 18)
-  context.strokeStyle = '#416b55'
+  context.strokeStyle = '#64676a'
   context.lineWidth = 3
   context.strokeRect(44, 44, RESULT_CARD_WIDTH - 88, RESULT_CARD_HEIGHT - 88)
   context.beginPath()
@@ -94,48 +101,48 @@ const createResultCardCanvas = (match, roundName) => {
   context.stroke()
 
   context.textAlign = 'center'
-  context.fillStyle = '#d9ef68'
+  context.fillStyle = '#c6f542'
   context.font = '800 27px Arial, sans-serif'
   context.fillText('MBA  /  SHUTTLE MATCH DESK', 540, 126)
-  context.fillStyle = '#f3f4e9'
+  context.fillStyle = '#fafafa'
   context.font = '700 22px Arial, sans-serif'
   context.fillText([roundName, formatName].filter(Boolean).join('  ·  ').toUpperCase(), 540, 179)
 
   context.fillStyle = '#ffffff'
   context.font = '700 37px Arial, sans-serif'
   context.fillText('MATCH COMPLETE', 540, 310)
-  context.fillStyle = '#d9ef68'
+  context.fillStyle = '#c6f542'
   context.font = '700 30px Arial, sans-serif'
   context.fillText('WINNER', 540, 386)
 
   const winnerFontSize = fitCanvasText(context, winner.name, 820, 76, 'Georgia, serif')
-  context.fillStyle = '#f3f4e9'
+  context.fillStyle = '#fafafa'
   context.font = `700 ${winnerFontSize}px Georgia, serif`
   context.fillText(winner.name, 540, 493)
   const winnerPlayersSize = fitCanvasText(context, playerLine(winner), 800, 31, 'Arial, sans-serif')
-  context.fillStyle = '#c5d5c7'
+  context.fillStyle = '#d3d6d9'
   context.font = `500 ${winnerPlayersSize}px Arial, sans-serif`
   context.fillText(playerLine(winner), 540, 555)
 
-  context.fillStyle = '#d9ef68'
+  context.fillStyle = '#c6f542'
   context.font = '700 150px Georgia, serif'
   context.fillText(`${match.scores[match.winner]} - ${match.scores[1 - match.winner]}`, 540, 710)
-  context.fillStyle = '#f3f4e9'
+  context.fillStyle = '#fafafa'
   const loserFontSize = fitCanvasText(context, loser.name, 780, 43, 'Arial, sans-serif')
   context.font = `700 ${loserFontSize}px Arial, sans-serif`
   context.fillText(`vs  ${loser.name}`, 540, 789)
   const loserPlayersSize = fitCanvasText(context, playerLine(loser), 780, 27, 'Arial, sans-serif')
-  context.fillStyle = '#c5d5c7'
+  context.fillStyle = '#d3d6d9'
   context.font = `500 ${loserPlayersSize}px Arial, sans-serif`
   context.fillText(playerLine(loser), 540, 837)
 
-  context.fillStyle = '#f3f4e9'
+  context.fillStyle = '#fafafa'
   context.font = '700 28px Arial, sans-serif'
   context.fillText('A GREAT MATCH. A CLEAR WINNER.', 540, 1110)
-  context.fillStyle = '#b9c8bc'
+  context.fillStyle = '#c8cbce'
   context.font = '500 22px Arial, sans-serif'
   context.fillText(new Date().toLocaleDateString(), 540, 1170)
-  context.fillStyle = '#d9ef68'
+  context.fillStyle = '#c6f542'
   context.font = '700 20px Arial, sans-serif'
   context.fillText('PLAY  ·  COMPETE  ·  CELEBRATE', 540, 1230)
 
@@ -155,20 +162,20 @@ const createRallyLogCanvases = (match) => {
     const context = canvas.getContext('2d')
     const pageRallies = rallies.slice(pageIndex * ralliesPerPage, (pageIndex + 1) * ralliesPerPage)
 
-    context.fillStyle = '#f3f4e9'
+    context.fillStyle = '#fafafa'
     context.fillRect(0, 0, RESULT_CARD_WIDTH, RESULT_CARD_HEIGHT)
-    context.fillStyle = '#123d30'
+    context.fillStyle = '#171717'
     context.fillRect(0, 0, RESULT_CARD_WIDTH, 190)
-    context.fillStyle = '#d9ef68'
+    context.fillStyle = '#c6f542'
     context.font = '800 25px Arial, sans-serif'
     context.fillText('MBA  /  SHUTTLE MATCH DESK', 70, 67)
     context.fillStyle = '#ffffff'
     context.font = '700 42px Georgia, serif'
     context.fillText('Point-by-point game log', 70, 128)
-    context.fillStyle = '#d9ef68'
+    context.fillStyle = '#c6f542'
     context.font = '700 24px Arial, sans-serif'
     context.fillText(`${match.teams[0].name}  ${match.scores[0]}  -  ${match.scores[1]}  ${match.teams[1].name}`, 70, 236)
-    context.fillStyle = '#50655a'
+    context.fillStyle = '#616467'
     context.font = '700 18px Arial, sans-serif'
     context.fillText('POINT', 70, 293)
     context.fillText('RALLY RESULT', 190, 293)
@@ -184,13 +191,13 @@ const createRallyLogCanvases = (match) => {
         : 'Point added'
       const description = `${creditedTeam} · ${detail}`
 
-      context.fillStyle = rowIndex % 2 === 0 ? '#e5ebdf' : '#ffffff'
+      context.fillStyle = rowIndex % 2 === 0 ? '#e9ecef' : '#ffffff'
       context.fillRect(58, y - 29, 964, 42)
-      context.fillStyle = '#1d563f'
+      context.fillStyle = '#202020'
       context.font = '700 19px Arial, sans-serif'
       context.fillText(String(rally.number).padStart(2, '0'), 75, y)
       const descriptionFontSize = fitCanvasText(context, description, 700, 19, 'Arial, sans-serif')
-      context.fillStyle = '#294739'
+      context.fillStyle = '#3f4245'
       context.font = `500 ${descriptionFontSize}px Arial, sans-serif`
       context.fillText(description, 190, y)
       context.textAlign = 'right'
@@ -199,9 +206,9 @@ const createRallyLogCanvases = (match) => {
       context.textAlign = 'left'
     })
 
-    context.fillStyle = '#1d563f'
+    context.fillStyle = '#202020'
     context.fillRect(58, 1215, 964, 2)
-    context.fillStyle = '#50655a'
+    context.fillStyle = '#616467'
     context.font = '600 18px Arial, sans-serif'
     context.fillText(`${rallies.length} rallies  ·  ${winnerName} wins`, 70, 1260)
     context.textAlign = 'right'
@@ -217,21 +224,21 @@ const createPlayerPerformanceCanvas = (match) => {
   canvas.height = RESULT_CARD_HEIGHT
   const context = canvas.getContext('2d')
 
-  context.fillStyle = '#f3f4e9'
+  context.fillStyle = '#fafafa'
   context.fillRect(0, 0, RESULT_CARD_WIDTH, RESULT_CARD_HEIGHT)
-  context.fillStyle = '#123d30'
+  context.fillStyle = '#171717'
   context.fillRect(0, 0, RESULT_CARD_WIDTH, 190)
-  context.fillStyle = '#d9ef68'
+  context.fillStyle = '#c6f542'
   context.font = '800 25px Arial, sans-serif'
   context.fillText('MBA  /  SHUTTLE MATCH DESK', 70, 67)
   context.fillStyle = '#ffffff'
   context.font = '700 42px Georgia, serif'
   context.fillText('Player performance', 70, 128)
-  context.fillStyle = '#d9ef68'
+  context.fillStyle = '#c6f542'
   context.font = '700 24px Arial, sans-serif'
   context.fillText(`${match.teams[0].name}  ${match.scores[0]}  -  ${match.scores[1]}  ${match.teams[1].name}`, 70, 236)
 
-  context.fillStyle = '#50655a'
+  context.fillStyle = '#616467'
   context.font = '700 18px Arial, sans-serif'
   context.fillText('PLAYER', 70, 304)
   context.fillText('TEAM', 430, 304)
@@ -246,15 +253,15 @@ const createPlayerPerformanceCanvas = (match) => {
     team.players.forEach((player, playerIndex) => {
       const y = 365 + rowIndex * 82
       const performance = calculatePlayerPerformance(match, side, playerIndex)
-      context.fillStyle = rowIndex % 2 === 0 ? '#e5ebdf' : '#ffffff'
+      context.fillStyle = rowIndex % 2 === 0 ? '#e9ecef' : '#ffffff'
       context.fillRect(58, y - 37, 964, 66)
-      context.fillStyle = '#1d563f'
+      context.fillStyle = '#202020'
       context.font = '700 22px Arial, sans-serif'
       context.fillText(player.name.trim() || 'Unnamed player', 75, y)
-      context.fillStyle = '#53695c'
+      context.fillStyle = '#65686b'
       context.font = '500 19px Arial, sans-serif'
       context.fillText(team.name, 430, y)
-      context.fillStyle = '#294739'
+      context.fillStyle = '#3f4245'
       context.font = '700 20px Arial, sans-serif'
       context.fillText(String(performance.pointsWon), 705, y)
       context.fillText(String(performance.pointsMissed), 825, y)
@@ -265,12 +272,159 @@ const createPlayerPerformanceCanvas = (match) => {
     })
   })
 
-  context.fillStyle = '#1d563f'
+  context.fillStyle = '#202020'
   context.fillRect(58, 1215, 964, 2)
-  context.fillStyle = '#50655a'
+  context.fillStyle = '#616467'
   context.font = '600 18px Arial, sans-serif'
   context.fillText(`Based on ${match.rallies.length} recorded rallies`, 70, 1260)
   return canvas
+}
+
+const drawPerformanceCharts = (canvas, match) => {
+  const context = canvas.getContext('2d')
+  const colors = ['#4b6d16', '#7460a6']
+  const points = [[0, 0], ...match.rallies.map((rally) => rally.scores)]
+  const maxScore = Math.max(1, ...points.flat())
+  const plot = { left: 100, top: 350, width: 880, height: 300 }
+  const players = match.teams.flatMap((team, side) =>
+    team.players.map((player, playerIndex) => ({
+      name: player.name.trim() || 'Unnamed player',
+      team: team.name,
+      ...calculatePlayerPerformance(match, side, playerIndex),
+    })),
+  )
+  const maxPlayerPoints = Math.max(1, ...players.flatMap((player) => [player.pointsWon, player.pointsMissed]))
+
+  context.fillStyle = '#fafafa'
+  context.fillRect(0, 0, canvas.width, canvas.height)
+  context.fillStyle = '#171717'
+  context.fillRect(0, 0, canvas.width, 190)
+  context.fillStyle = '#c6f542'
+  context.font = '800 25px Arial, sans-serif'
+  context.fillText('MBA  /  SHUTTLE MATCH DESK', 70, 67)
+  context.fillStyle = '#ffffff'
+  context.font = '700 42px Georgia, serif'
+  context.fillText('Game performance charts', 70, 128)
+  context.fillStyle = '#202020'
+  context.font = '700 28px Arial, sans-serif'
+  context.fillText('Score progression by rally', 70, 245)
+
+  match.teams.forEach((team, side) => {
+    context.fillStyle = colors[side]
+    context.fillRect(70 + side * 480, 279, 18, 18)
+    context.font = '600 20px Arial, sans-serif'
+    context.fillText(team.name, 100 + side * 480, 296, 425)
+  })
+
+  for (let tick = 0; tick <= 5; tick += 1) {
+    const y = plot.top + plot.height - tick * plot.height / 5
+    context.strokeStyle = '#bec6cd'
+    context.beginPath()
+    context.moveTo(plot.left, y)
+    context.lineTo(plot.left + plot.width, y)
+    context.stroke()
+    context.fillStyle = '#616467'
+    context.font = '500 18px Arial, sans-serif'
+    context.textAlign = 'right'
+    context.fillText((maxScore * tick / 5).toFixed(1).replace('.0', ''), plot.left - 15, y + 6)
+  }
+  context.textAlign = 'center'
+  const rallyTicks = Math.min(5, match.rallies.length)
+  for (let tick = 0; tick <= rallyTicks; tick += 1) {
+    const rallyIndex = rallyTicks ? Math.round(tick * match.rallies.length / rallyTicks) : 0
+    const x = plot.left + rallyIndex * plot.width / Math.max(1, match.rallies.length)
+    context.fillText(String(rallyIndex), x, plot.top + plot.height + 30)
+  }
+  context.fillText('Rally number', plot.left + plot.width / 2, 710)
+  colors.forEach((color, side) => {
+    context.strokeStyle = color
+    context.lineWidth = 4
+    context.beginPath()
+    points.forEach((scores, index) => {
+      const x = plot.left + index * plot.width / Math.max(1, match.rallies.length)
+      const y = plot.top + plot.height - scores[side] * plot.height / maxScore
+      if (index === 0) context.moveTo(x, y)
+      else context.lineTo(x, y)
+    })
+    context.stroke()
+    context.lineWidth = 1
+  })
+
+  context.textAlign = 'left'
+  context.fillStyle = '#202020'
+  context.font = '700 28px Arial, sans-serif'
+  context.fillText('Player points won versus missed', 70, 785)
+  ;['Won', 'Missed'].forEach((label, index) => {
+    context.fillStyle = colors[index]
+    context.fillRect(70 + index * 180, 815, 18, 18)
+    context.font = '600 20px Arial, sans-serif'
+    context.fillText(label, 100 + index * 180, 832)
+  })
+  players.forEach((player, index) => {
+    const y = 865 + index * 74
+    context.fillStyle = '#3f4245'
+    context.font = '700 19px Arial, sans-serif'
+    context.fillText(player.name, 70, y + 24, 250)
+    context.font = '500 16px Arial, sans-serif'
+    context.fillText(player.team, 70, y + 46, 250)
+    ;[player.pointsWon, player.pointsMissed].forEach((value, metric) => {
+      const barY = y + metric * 26
+      const width = value * 570 / maxPlayerPoints
+      context.fillStyle = '#e9ecef'
+      context.fillRect(350, barY, 570, 20)
+      context.fillStyle = colors[metric]
+      context.fillRect(350, barY, width, 20)
+      context.font = '700 18px Arial, sans-serif'
+      context.fillText(String(value), 935, barY + 17)
+    })
+  })
+  context.fillStyle = '#616467'
+  context.font = '500 18px Arial, sans-serif'
+  context.fillText('Player bars count only rallies with a recorded player outcome.', 70, 1195)
+  context.fillText(`Score chart includes all ${match.rallies.length} recorded rallies.`, 70, 1230)
+  if (!match.rallies.length) {
+    context.fillText('Record a rally to begin charting your game.', 70, 1270)
+  }
+}
+
+const createPerformanceChartCanvas = (match) => {
+  const canvas = document.createElement('canvas')
+  canvas.width = RESULT_CARD_WIDTH
+  canvas.height = RESULT_CARD_HEIGHT
+  drawPerformanceCharts(canvas, match)
+  return canvas
+}
+
+function PerformanceCharts({ match }) {
+  const canvasRef = useRef(null)
+
+  useEffect(() => {
+    drawPerformanceCharts(canvasRef.current, match)
+  }, [match])
+
+  return (
+    <section className="performance-report" aria-labelledby="performance-report-title">
+      <p className="eyebrow">Game report</p>
+      <h2 id="performance-report-title">Performance charts</h2>
+      <canvas
+        ref={canvasRef}
+        width={RESULT_CARD_WIDTH}
+        height={RESULT_CARD_HEIGHT}
+        role="img"
+        aria-label={`Score progression over ${match.rallies.length} rallies: ${match.teams[0].name} ${match.scores[0]}, ${match.teams[1].name} ${match.scores[1]}. Player points won and missed are listed below.`}
+      />
+      <ul>
+        {match.teams.flatMap((team, side) => team.players.map((player, playerIndex) => {
+          const performance = calculatePlayerPerformance(match, side, playerIndex)
+          return (
+            <li key={`${side}-${playerIndex}`}>
+              {player.name || 'Unnamed player'} ({team.name}): {performance.pointsWon} won, {performance.pointsMissed} missed
+            </li>
+          )
+        }))}
+      </ul>
+    </section>
+  )
 }
 
 const encodePdfFromJpegs = (jpegPages) => {
@@ -423,7 +577,7 @@ const rallyOutcomes = [
   { label: 'Smash out', kind: 'error' },
 ]
 
-function App() {
+function MatchDesk() {
   const [setupMode, setSetupMode] = useState('match')
   const [format, setFormat] = useState('doubles')
   const [target, setTarget] = useState(21)
@@ -754,7 +908,7 @@ function App() {
   )
 
   const downloadGameLog = () => downloadPdf(
-    [...createRallyLogCanvases(match), createPlayerPerformanceCanvas(match)],
+    [...createRallyLogCanvases(match), createPlayerPerformanceCanvas(match), createPerformanceChartCanvas(match)],
     'game-log',
     'Game log PDF downloaded',
   )
@@ -1235,7 +1389,7 @@ function App() {
       <section className="scoreboard" aria-label="Badminton scoreboard">
         {match.displayOrder.map((teamIndex, displayIndex) => {
           const team = match.teams[teamIndex]
-          const isServing = match.serveSide === teamIndex
+          const isServing = match.winner === null && match.serveSide === teamIndex
           const activeServer = isServing ? servingPlayer : null
 
           return (
@@ -1257,7 +1411,14 @@ function App() {
                   const courtLabel = player.court === 0 ? 'Right court' : 'Left court'
                   const performance = getPlayerPerformance(teamIndex, playerIndex)
                   return (
-                    <div className={`player-box ${isPlayerServing ? 'player-serving' : ''}`} key={playerIndex}>
+                    <div
+                      className={`player-box ${isPlayerServing ? 'player-serving' : ''}`}
+                      key={playerIndex}
+                      style={match.format === 'doubles' ? {
+                        gridColumn: player.court === 1 ? 1 : 3,
+                        gridRow: 1,
+                      } : undefined}
+                    >
                       <button
                         className="player-profile-action"
                         type="button"
@@ -1266,9 +1427,9 @@ function App() {
                         aria-label={`Record rally outcome for ${player.name || 'Unnamed player'}`}
                       >
                         {player.image ? (
-                          <img className="player-photo" src={player.image} alt="" />
+                          <img key={`${displayIndex}-${player.court}`} className="player-photo" src={player.image} alt="" />
                         ) : (
-                          <span className="player-photo player-placeholder" aria-hidden="true">
+                          <span key={`${displayIndex}-${player.court}`} className="player-photo player-placeholder" aria-hidden="true">
                             {(player.name.trim().charAt(0) || '?').toUpperCase()}
                           </span>
                         )}
@@ -1290,7 +1451,13 @@ function App() {
                           {performance.pointsWon} won · {performance.pointsMissed} missed / {performance.totalGamePoints} game points
                         </span>
                       </div>
-                      {isPlayerServing && <span className="server-chip">Serve</span>}
+                      <span
+                        className={`server-chip${isPlayerServing ? '' : ' server-chip-placeholder'}`}
+                        aria-hidden={isPlayerServing ? undefined : true}
+                      >
+                        {isPlayerServing && <img src={shuttlecock} alt="" aria-hidden="true" />}
+                        Serving now
+                      </span>
                     </div>
                   )
                 })}
@@ -1326,13 +1493,19 @@ function App() {
       <section className="match-footer">
         <div className="serve-summary">
           <span className="serve-dot" />
-          <p><strong>{servingPlayer?.name || 'Player'}</strong> serves next</p>
-          {match.format === 'doubles' && <span className="serve-court-label">{match.scores[match.serveSide] % 2 === 0 ? 'Right service court' : 'Left service court'}</span>}
+          <p aria-live="polite">
+            {match.winner === null
+              ? <><strong>{servingPlayer?.name || 'Player'}</strong> serves next</>
+              : 'Game complete'}
+          </p>
+          {match.winner === null && match.format === 'doubles' && <span className="serve-court-label">{match.scores[match.serveSide] % 2 === 0 ? 'Right service court' : 'Left service court'}</span>}
         </div>
         <button className="undo-button" type="button" onClick={undoPoint} disabled={!undoStack.length}>
           <span aria-hidden="true">&#8630;</span> Undo point
         </button>
       </section>
+
+      <PerformanceCharts match={match} />
 
       <section className="rally-section">
         <div className="rally-heading">
@@ -1405,6 +1578,49 @@ function App() {
         </div>
       )}
     </main>
+  )
+}
+
+function App() {
+  const [user, setUser] = useState(null)
+  const [authError, setAuthError] = useState('')
+
+  // TODO: Replace the public demo gate with Firebase Authentication once setup is complete.
+  const handleAuthentication = ({ email, password }) => {
+    setAuthError('')
+    if (email.toLowerCase() !== demoCredentials.email || password !== demoCredentials.password) {
+      setAuthError('Incorrect demo email or password. Use the demo credentials shown above.')
+      return
+    }
+    setUser({ email: demoCredentials.email })
+  }
+
+  const handleSignOut = () => {
+    setAuthError('')
+    setUser(null)
+  }
+
+  if (!user) {
+    return (
+      <LoginPage
+        credentials={demoCredentials}
+        error={authError}
+        onAuthenticate={handleAuthentication}
+      />
+    )
+  }
+
+  return (
+    <div className="authenticated-shell">
+      <header className="session-bar">
+        <span className="session-email">{user.email}</span>
+        <button className="session-signout" type="button" onClick={handleSignOut}>
+          Sign out
+        </button>
+        {authError && <p className="session-error" role="alert">{authError}</p>}
+      </header>
+      <MatchDesk />
+    </div>
   )
 }
 
