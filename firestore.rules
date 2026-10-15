@@ -24,7 +24,7 @@ service cloud.firestore {
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.createdAt == request.time
         && request.resource.data.format in ['singles', 'doubles']
-        && request.resource.data.target in [20, 21]
+        && request.resource.data.target in [20, 14]
         && request.resource.data.winner in [0, 1]
         && request.resource.data.scores is list && request.resource.data.scores.size() == 2
         && request.resource.data.scores[0] is int && request.resource.data.scores[1] is int
@@ -43,7 +43,8 @@ service cloud.firestore {
           && validResultPlayer(request.resource.data.players[1], 0, request.resource.data.scores[0] + request.resource.data.scores[1])
           && validResultPlayer(request.resource.data.players[2], 1, request.resource.data.scores[0] + request.resource.data.scores[1])
           && validResultPlayer(request.resource.data.players[3], 1, request.resource.data.scores[0] + request.resource.data.scores[1])));
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if isAdmin();
     }
     match /admins/{uid} {
       allow get: if request.auth != null && request.auth.uid == uid;

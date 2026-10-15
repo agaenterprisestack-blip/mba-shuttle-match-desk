@@ -1,14 +1,12 @@
 import { useEffect, useState } from 'react'
-import { managePlayerName, subscribeToAdminAccess, subscribeToRemovedPlayers } from './adminRoster.js'
+import { managePlayerName, subscribeToAdminAccess } from './adminRoster.js'
 import { subscribeToPlayerEntries } from './playerRoster.js'
 import { firebaseErrorMessage } from './firebase.js'
 import Leaderboard from './Leaderboard.jsx'
 
 function PlayerAdminPage() {
   const [players, setPlayers] = useState([])
-  const [removedPlayers, setRemovedPlayers] = useState([])
   const [playersReady, setPlayersReady] = useState(false)
-  const [removedReady, setRemovedReady] = useState(false)
   const [name, setName] = useState('')
   const [pendingDelete, setPendingDelete] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -25,20 +23,10 @@ function PlayerAdminPage() {
       setPlayersReady(false)
       setLoadError(firebaseErrorMessage(failure))
     })
-    const unsubscribeRemoved = subscribeToRemovedPlayers((entries, fromCache) => {
-      setRemovedPlayers(entries)
-      setRemovedReady(!fromCache)
-    }, (failure) => {
-      setRemovedReady(false)
-      setLoadError(firebaseErrorMessage(failure))
-    })
-    return () => {
-      unsubscribePlayers()
-      unsubscribeRemoved()
-    }
+    return unsubscribePlayers
   }, [retry])
 
-  const ready = playersReady && removedReady && !loadError
+  const ready = playersReady && !loadError
   const changePlayer = async (value, removeId) => {
     setError('')
     setMessage('')
@@ -66,7 +54,6 @@ function PlayerAdminPage() {
           <button type="button" onClick={() => {
             setLoadError('')
             setPlayersReady(false)
-            setRemovedReady(false)
             setRetry((current) => current + 1)
           }}>Retry loading players</button>
         </div>
@@ -105,7 +92,7 @@ function PlayerAdminPage() {
       {pendingDelete && (
         <section className="admin-confirm" aria-labelledby="delete-player-title">
           <h2 id="delete-player-title">Delete "{pendingDelete.name}"?</h2>
-          <p>This name will stay removed even after sign-in. An admin can restore it below.</p>
+          <p>This name will stay removed even after sign-in.</p>
           <div className="admin-add-row">
             <button className="admin-delete" type="button" disabled={busy || !ready}
               onClick={() => changePlayer(pendingDelete.name, pendingDelete.id)}>Confirm delete</button>
@@ -113,19 +100,6 @@ function PlayerAdminPage() {
           </div>
         </section>
       )}
-      <section aria-labelledby="removed-players-title">
-        <h2 id="removed-players-title">Removed names ({removedPlayers.length})</h2>
-        <p>Restoring a name makes it available to all signed-in users again.</p>
-        <ul className="admin-player-list">
-          {removedPlayers.map((player) => (
-            <li key={player.id}>
-              <span>{player.name}</span>
-              <button type="button" disabled={busy || !ready}
-                aria-label={`Restore ${player.name}`} onClick={() => changePlayer(player.name)}>Restore</button>
-            </li>
-          ))}
-        </ul>
-      </section>
     </main>
   )
 }
@@ -163,7 +137,7 @@ function AdminWorkspace({ uid, children }) {
         </nav>
       <div hidden={showingAdmin || page === 'leaderboard'}>{children(isAdmin)}</div>
       {showingAdmin && <PlayerAdminPage />}
-      {page === 'leaderboard' && <Leaderboard />}
+      {page === 'leaderboard' && <Leaderboard isAdmin={isAdmin} />}
     </>
   )
 }

@@ -26,6 +26,32 @@ export const saveLeaderboardResult = async (match) => {
 export const subscribeToMatchResults = (onResults, onError) => onSnapshot(
   collection(db, 'matchResults'),
   { includeMetadataChanges: true },
-  (snapshot) => onResults(snapshot.docs.map((entry) => entry.data()), snapshot.metadata.fromCache),
+  (snapshot) => onResults(snapshot.docs.map((entry) => ({ ...entry.data(), id: entry.id })), snapshot.metadata.fromCache),
   onError,
 )
+
+export const deleteLeaderboardResults = async (ids) => {
+  if (!auth?.currentUser || !db) throw new Error('Sign in to delete leaderboard records.')
+  if (!Array.isArray(ids) || ids.length === 0 || ids.some((id) => typeof id !== 'string' || !id || id.includes('/'))) {
+    throw new Error('Choose valid saved match records to delete.')
+  }
+  const uid = auth.currentUser.uid
+  const uniqueIds = [...new Set(ids)]
+  let deleted = 0
+  try {
+    // Keep each transaction below Firestore write limits and recheck admin access for every group.
+    for (let offset = 0; offset < uniqueIds.length; offset += 100) {
+      const group = uniqueIds.slice(offset, offset + 100)
+      await runTransaction(db, async (transaction) => {
+        const admin = await transaction.get(doc(db, 'admins', uid))
+        if (!admin.exists()) throw new Error('Only admins can delete leaderboard records.')
+        for (const id of group) transaction.delete(doc(db, 'matchResults', id))
+      })
+      deleted += group.length
+    }
+  } catch (failure) {
+    if (deleted) throw new Error(`${deleted} selected records were deleted before the operation stopped. Refresh the remaining records and try again. ${failure.message}`, { cause: failure })
+    throw failure
+  }
+  return deleted
+}

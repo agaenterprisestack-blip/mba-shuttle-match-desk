@@ -584,7 +584,7 @@ const rallyOutcomes = [
 function MatchDesk({ isAdmin }) {
   const [setupMode, setSetupMode] = useState('match')
   const [format, setFormat] = useState('doubles')
-  const [target, setTarget] = useState(21)
+  const [target, setTarget] = useState(20)
   const [teams, setTeams] = useState(createTeams)
   const [tournamentTeamCount, setTournamentTeamCount] = useState('8')
   const [tournamentTeams, setTournamentTeams] = useState(createTournamentTeams)
@@ -1283,7 +1283,7 @@ function MatchDesk({ isAdmin }) {
               </div>
             </div>
             <div className="target-options" role="group" aria-label="Game point threshold">
-              {[20, 21].map((points) => (
+              {[20, 14].map((points) => (
                 <button
                   type="button"
                   key={points}

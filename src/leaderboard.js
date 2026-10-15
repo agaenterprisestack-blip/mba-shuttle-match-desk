@@ -1,8 +1,59 @@
 import { normalizePlayerName, playerNameKey } from './playerNames.js'
 
+export const leaderboardPeriods = [
+  { value: 'all', label: 'All time' },
+  { value: 'week', label: 'This week' },
+  { value: 'month', label: 'This month' },
+  { value: 'year', label: 'This year' },
+]
+
+export const filterLeaderboardResults = (results, period, now = new Date()) => {
+  if (!leaderboardPeriods.some((entry) => entry.value === period)) {
+    throw new Error('Choose a valid leaderboard period.')
+  }
+  if (period === 'all') return { results, undatedCount: 0 }
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const end = new Date(start)
+  if (period === 'week') {
+    start.setDate(start.getDate() - (start.getDay() + 6) % 7)
+    end.setTime(start.getTime())
+    end.setDate(end.getDate() + 7)
+  } else if (period === 'month') {
+    start.setDate(1)
+    end.setFullYear(start.getFullYear(), start.getMonth() + 1, 1)
+  } else {
+    start.setMonth(0, 1)
+    end.setFullYear(start.getFullYear() + 1, 0, 1)
+  }
+  let undatedCount = 0
+  const filtered = results.filter((result) => {
+    const timestamp = result.createdAt instanceof Date ? result.createdAt.getTime()
+      : result.createdAt?.toMillis?.()
+    if (!Number.isFinite(timestamp)) {
+      undatedCount += 1
+      return false
+    }
+    return timestamp >= start.getTime() && timestamp < end.getTime()
+  })
+  return { results: filtered, undatedCount }
+}
+
+export const paginateLeaderboard = (players, requestedPage) => {
+  const pageSize = 10
+  const pageCount = Math.max(1, Math.ceil(players.length / pageSize))
+  const page = Math.max(1, Math.min(requestedPage, pageCount))
+  const offset = (page - 1) * pageSize
+  return {
+    page, pageCount,
+    players: players.slice(offset, offset + pageSize),
+    first: players.length ? offset + 1 : 0,
+    last: Math.min(offset + pageSize, players.length),
+  }
+}
+
 export const completedMatchResult = (match) => {
   const { scores, winner, format, target } = match
-  if (!['singles', 'doubles'].includes(format) || ![20, 21].includes(target)
+  if (!['singles', 'doubles'].includes(format) || ![20, 14].includes(target)
     || ![0, 1].includes(winner) || scores.length !== 2
     || !scores.every((score) => Number.isInteger(score) && score >= 0 && score <= 30)
     || scores[winner] <= scores[1 - winner]
@@ -51,7 +102,35 @@ export const calculateLeaderboard = (results) => {
       totals.set(key, entry)
     }
   }
-  const entries = [...totals.values()].map((entry) => ({
+  return rankLeaderboard([...totals.values()])
+}
+
+export const calculateTeamLeaderboard = (results) => {
+  const totals = new Map()
+  for (const result of results) {
+    if (result.format !== 'doubles') continue
+    for (const side of [0, 1]) {
+      const members = result.players.filter((player) => player.side === side)
+        .map((player) => ({ key: playerNameKey(player.name), name: normalizePlayerName(player.name) }))
+        .sort((a, b) => a.key.localeCompare(b.key))
+      const key = JSON.stringify(members.map((member) => member.key))
+      const entry = totals.get(key) || {
+        key, name: members.map((member) => member.name).join(' / '),
+        played: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0,
+      }
+      entry.played += 1
+      entry.wins += Number(side === result.winner)
+      entry.losses += Number(side !== result.winner)
+      entry.pointsFor += result.scores[side]
+      entry.pointsAgainst += result.scores[1 - side]
+      totals.set(key, entry)
+    }
+  }
+  return rankLeaderboard([...totals.values()])
+}
+
+const rankLeaderboard = (totals) => {
+  const entries = totals.map((entry) => ({
     ...entry,
     winRate: entry.wins / entry.played,
     difference: entry.pointsFor - entry.pointsAgainst,
