@@ -4,6 +4,149 @@
   padding: 30px 28px 64px;
 }
 
+.admin-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  padding: 16px 28px 0;
+}
+
+.admin-navigation button,
+.admin-page button {
+  padding: 10px 16px;
+  border: 1px solid #35383b;
+  border-radius: 6px;
+  background: #fff;
+  color: #202020;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-navigation button[aria-current],
+.admin-add-form button {
+  background: #c6f542;
+}
+
+.admin-page button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.admin-page > p,
+.admin-page section > p {
+  margin-top: 12px;
+  line-height: 1.5;
+}
+
+.admin-page section,
+.admin-add-form {
+  margin-top: 24px;
+}
+
+.admin-add-form label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+
+.admin-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.admin-add-row input {
+  flex: 1 1 220px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #616467;
+  border-radius: 6px;
+  background: #fff;
+  color: #202020;
+  font: inherit;
+}
+
+.admin-player-list {
+  list-style: none;
+  padding: 0;
+}
+
+.admin-player-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid #dbdee1;
+}
+
+.admin-player-list span {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.admin-page .admin-delete {
+  color: #8c1515;
+  border-color: #8c1515;
+}
+
+.admin-confirm {
+  padding: 20px;
+  border: 1px solid #8c1515;
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+
+.admin-feedback {
+  color: #225117;
+}
+
+.leaderboard-scroll {
+  overflow-x: auto;
+  margin-top: 24px;
+}
+
+.leaderboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  color: #202020;
+}
+
+.leaderboard-table caption {
+  text-align: left;
+  padding-bottom: 12px;
+}
+
+.leaderboard-table th,
+.leaderboard-table td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #dbdee1;
+}
+
+.leaderboard-table thead {
+  background: #c6f542;
+}
+
+.leaderboard-table th[scope="row"] {
+  min-width: 160px;
+  overflow-wrap: anywhere;
+}
+
+.leaderboard-save {
+  margin-top: 16px;
+  line-height: 1.5;
+}
+
+.leaderboard-save button {
+  margin-top: 12px;
+}
+
 .performance-report {
   margin-top: 30px;
   border-top: 1px solid #dbdee1;
@@ -421,6 +564,17 @@ h2 {
   font-size: 0.93rem;
   font-weight: 700;
   text-transform: none;
+}
+
+.player-name-field {
+  min-width: 0;
+  flex: 1;
+}
+
+.roster-status {
+  color: #5d6063;
+  font-size: 0.8rem;
+  line-height: 1.5;
 }
 
 .setup-aside {
@@ -1212,13 +1366,62 @@ h2 {
     gap: 10px;
   }
 
+  .profile-fields {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+    margin: 0 0 8px;
+    padding: 0;
+    border: 0;
+  }
+
+  .profile-fields legend {
+    margin-bottom: 12px;
+    font-weight: 800;
+    color: #43256b;
+  }
+
+  .profile-field {
+    display: grid;
+    gap: 7px;
+    min-width: 0;
+  }
+
+  .profile-privacy {
+    margin: 0;
+    color: #626569;
+    font-size: 0.76rem;
+    line-height: 1.5;
+  }
+
+  .profile-setup {
+    width: min(100%, 520px);
+    margin: 32px auto;
+    padding: 24px;
+  }
+
+  .profile-setup > p {
+    margin: 16px 0 24px;
+    line-height: 1.5;
+  }
+
+  .account-welcome {
+    width: min(1180px, 100%);
+    margin: 16px auto 0;
+    padding: 0 28px;
+    color: #43256b;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+
   .login-form label {
     color: #3f4245;
     font-size: 0.82rem;
     font-weight: 800;
   }
 
-  .login-form > input {
+  .login-form > input,
+  .profile-field input {
     width: 100%;
     min-height: 50px;
     border: 1px solid #bec6cd;
@@ -1228,15 +1431,18 @@ h2 {
     padding: 0 14px;
   }
 
-  .login-form > input::placeholder {
+  .login-form > input::placeholder,
+  .profile-field input::placeholder {
     color: #9fa2a5;
   }
 
-  .login-form > input:focus {
+  .login-form > input:focus,
+  .profile-field input:focus {
     border-color: #606366;
   }
 
-  .login-form > input:disabled {
+  .login-form > input:disabled,
+  .profile-field input:disabled {
     background: #eef1f4;
     color: #8d9093;
   }

@@ -2,11 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import LoginPage from './LoginPage.jsx'
 import shuttlecock from './assets/shuttlecock.svg'
-
-const demoCredentials = {
-  email: 'demo@shuttlematchdesk.com',
-  password: 'ShuttleDemo21',
-}
+import { createUserWithEmailAndPassword, onAuthStateChanged, sendPasswordResetEmail, signInWithEmailAndPassword, signOut } from 'firebase/auth'
+import { auth, firebaseErrorMessage } from './firebase.js'
+import PlayerNameField from './PlayerNameField.jsx'
+import { subscribeToPlayers } from './playerRoster.js'
+import { normalizeProfile, saveAccountProfile } from './accountProfile.js'
+import AccountProfileGate from './AccountProfileGate.jsx'
+import AdminWorkspace from './AdminWorkspace.jsx'
+import { saveLeaderboardResult } from './leaderboardStore.js'
 
 const createTeams = () => [
   {
@@ -474,6 +477,7 @@ const encodePdfFromJpegs = (jpegPages) => {
 }
 
 const createGame = (teams, format, target, tournamentRef = null, firstServe = 0, serverIndex = 0) => ({
+  id: crypto.randomUUID(),
   format,
   target,
   tournamentRef,
@@ -568,8 +572,8 @@ const createTournamentBracket = (entrants) => {
 
 const rallyOutcomes = [
   { label: 'Serve point', kind: 'winner', serverOnly: true },
-  { label: 'Miracle point', kind: 'winner' },
-  { label: 'Shot point', kind: 'winner' },
+  { label: 'Defence point', kind: 'winner' },
+  { label: 'Smash point', kind: 'winner' },
   { label: 'Drop point', kind: 'winner' },
   { label: 'Serve net', kind: 'error', serverOnly: true },
   { label: 'Serve out', kind: 'error', serverOnly: true },
@@ -577,7 +581,7 @@ const rallyOutcomes = [
   { label: 'Smash out', kind: 'error' },
 ]
 
-function MatchDesk() {
+function MatchDesk({ isAdmin }) {
   const [setupMode, setSetupMode] = useState('match')
   const [format, setFormat] = useState('doubles')
   const [target, setTarget] = useState(21)
@@ -593,6 +597,37 @@ function MatchDesk() {
   const [postCopied, setPostCopied] = useState(false)
   const [postCopyFailed, setPostCopyFailed] = useState(false)
   const [downloadStatus, setDownloadStatus] = useState('')
+  const [savedNames, setSavedNames] = useState([])
+  const [rosterState, setRosterState] = useState({ ready: false, error: '' })
+  const [savedResultIds, setSavedResultIds] = useState(() => new Set())
+  const [savingResultId, setSavingResultId] = useState(null)
+  const [resultError, setResultError] = useState(null)
+  const savingResultRef = useRef(null)
+
+  const saveResult = async () => {
+    if (!match || savingResultRef.current || savedResultIds.has(match.id)) return
+    const game = match
+    savingResultRef.current = game.id
+    setSavingResultId(game.id)
+    setResultError(null)
+    try {
+      await saveLeaderboardResult(game)
+      setSavedResultIds((current) => new Set([...current, game.id]))
+    } catch (error) {
+      setResultError({ id: game.id, message: firebaseErrorMessage(error) })
+    } finally {
+      savingResultRef.current = null
+      setSavingResultId(null)
+    }
+  }
+
+  useEffect(() => subscribeToPlayers(
+    (names, fromCache) => {
+      setSavedNames(names)
+      setRosterState({ ready: !fromCache, error: '' })
+    },
+    (error) => setRosterState({ ready: false, error: firebaseErrorMessage(error) }),
+  ), [])
 
   const playersPerSide = format === 'singles' ? 1 : 2
 
@@ -914,7 +949,7 @@ function MatchDesk() {
   )
 
   const undoPoint = () => {
-    if (!undoStack.length) return
+    if (!undoStack.length || savedResultIds.has(match.id) || savingResultRef.current === match.id) return
     const previousMatch = undoStack[undoStack.length - 1]
     setMatch((current) => ({ ...previousMatch, displayOrder: current.displayOrder }))
     setUndoStack((current) => current.slice(0, -1))
@@ -947,6 +982,7 @@ function MatchDesk() {
     setPointEntry(null)
     setMatch((current) => ({
       ...current,
+      id: crypto.randomUUID(),
       teams: current.teams.map((team) => ({
         ...team,
         players: team.players.map((player, index) => ({ ...player, court: index })),
@@ -1165,21 +1201,27 @@ function MatchDesk() {
                               : handlePhoto(event, teamIndex, playerIndex)}
                           />
                         </label>
-                        <label className="player-name-label">
-                          <span>Player {playerIndex + 1}</span>
-                          <input
-                            value={player.name}
-                            placeholder={`Enter player ${playerIndex + 1} name`}
-                            maxLength={32}
-                            onChange={(event) => setSetupPlayer(teamIndex, playerIndex, { name: event.target.value })}
-                            aria-label={`Side ${teamIndex + 1} player ${playerIndex + 1} name`}
-                          />
-                        </label>
+                        <PlayerNameField
+                          name={player.name}
+                          playerIndex={playerIndex}
+                          teamIndex={teamIndex}
+                          onChange={(name) => setSetupPlayer(teamIndex, playerIndex, { name })}
+                          savedNames={savedNames}
+                        />
                       </div>
                     ))}
                   </div>
                 </section>
               ))}
+            </div>
+
+            <div className="roster-status">
+              <p>Names of users who have signed in are added automatically unless removed by an admin. Type in any player field to choose a suggested name or enter a name for this game only. Suggested names remain after sign-out; other profile details and photos are not shared.</p>
+              {rosterState.error ? (
+                <p className="auth-error" role="alert">{rosterState.error} Reload the page after resolving the issue to reconnect.</p>
+              ) : (
+                <p role="status">{rosterState.ready ? `${savedNames.length} saved player names available.` : 'Connecting to the shared roster. Check your connection if this continues; saving requires Firebase access.'}</p>
+              )}
             </div>
 
             {isTournamentSetup && (
@@ -1378,6 +1420,19 @@ function MatchDesk() {
             </div>
           </div>
           <p className="result-download-status" aria-live="polite">{downloadStatus}</p>
+          <div className="leaderboard-save">
+            {savedResultIds.has(match.id) ? (
+              <p role="status">Saved to the leaderboard. This final result is locked; reset starts a new game without removing this result.</p>
+            ) : isAdmin ? (
+              <>
+                <p>Save this final result to maintain player performance across sign-ins. Saving locks Undo for this game. Check names and scores first; leaving without saving will not count this match.</p>
+                <button className="download-result-button" type="button" disabled={Boolean(savingResultId)} onClick={saveResult}>
+                  {savingResultId === match.id ? 'Saving result...' : 'Save final result to leaderboard'}
+                </button>
+              </>
+            ) : <p>Only an admin can save this completed match to the leaderboard.</p>}
+            {resultError?.id === match.id && <p className="auth-error" role="alert">{resultError.message} Result not confirmed saved. Retry saving before leaving.</p>}
+          </div>
           {match.tournamentRef && (
             <button className="winner-continue-button" type="button" onClick={advanceTournament}>
               Record result &amp; continue <span aria-hidden="true">-&gt;</span>
@@ -1500,7 +1555,7 @@ function MatchDesk() {
           </p>
           {match.winner === null && match.format === 'doubles' && <span className="serve-court-label">{match.scores[match.serveSide] % 2 === 0 ? 'Right service court' : 'Left service court'}</span>}
         </div>
-        <button className="undo-button" type="button" onClick={undoPoint} disabled={!undoStack.length}>
+        <button className="undo-button" type="button" onClick={undoPoint} disabled={!undoStack.length || savedResultIds.has(match.id) || savingResultId === match.id}>
           <span aria-hidden="true">&#8630;</span> Undo point
         </button>
       </section>
@@ -1584,28 +1639,93 @@ function MatchDesk() {
 function App() {
   const [user, setUser] = useState(null)
   const [authError, setAuthError] = useState('')
+  const [authMessage, setAuthMessage] = useState('')
+  const [authLoading, setAuthLoading] = useState(Boolean(auth))
+  const [authBusy, setAuthBusy] = useState(false)
+  const [registrationPending, setRegistrationPending] = useState(false)
+  const [signupProfile, setSignupProfile] = useState(null)
 
-  // TODO: Replace the public demo gate with Firebase Authentication once setup is complete.
-  const handleAuthentication = ({ email, password }) => {
+  useEffect(() => {
+    if (!auth) return
+    return onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser)
+      setAuthLoading(false)
+    }, (error) => {
+      setAuthError(firebaseErrorMessage(error))
+      setAuthLoading(false)
+    })
+  }, [])
+
+  const clearAuthFeedback = () => {
     setAuthError('')
-    if (email.toLowerCase() !== demoCredentials.email || password !== demoCredentials.password) {
-      setAuthError('Incorrect demo email or password. Use the demo credentials shown above.')
-      return
-    }
-    setUser({ email: demoCredentials.email })
+    setAuthMessage('')
   }
 
-  const handleSignOut = () => {
-    setAuthError('')
-    setUser(null)
+  const handleAuthentication = async ({ email, password, creatingAccount, profile }) => {
+    clearAuthFeedback()
+    setAuthBusy(true)
+    try {
+      if (creatingAccount) {
+        const details = normalizeProfile(profile)
+        setSignupProfile(details)
+        setRegistrationPending(true)
+        const result = await createUserWithEmailAndPassword(auth, email, password)
+        await saveAccountProfile(result.user.uid, details)
+      } else {
+        await signInWithEmailAndPassword(auth, email, password)
+      }
+    } catch (error) {
+      setAuthError(firebaseErrorMessage(error))
+    } finally {
+      setAuthBusy(false)
+      setRegistrationPending(false)
+    }
+  }
+
+  const handleResetPassword = async (email) => {
+    clearAuthFeedback()
+    if (!email) {
+      setAuthError('Enter your email address first to reset your password.')
+      return
+    }
+    setAuthBusy(true)
+    try {
+      await sendPasswordResetEmail(auth, email)
+      setAuthMessage('If an account exists for this email, a password reset link has been sent.')
+    } catch (error) {
+      setAuthError(firebaseErrorMessage(error))
+    } finally {
+      setAuthBusy(false)
+    }
+  }
+
+  const handleSignOut = async () => {
+    clearAuthFeedback()
+    setAuthBusy(true)
+    try {
+      await signOut(auth)
+      setSignupProfile(null)
+    } catch (error) {
+      setAuthError(firebaseErrorMessage(error))
+    } finally {
+      setAuthBusy(false)
+    }
+  }
+
+  if (authLoading || registrationPending) {
+    return <main className="auth-loading" role="status">{registrationPending ? 'Creating your account and saving your profile...' : 'Connecting to Firebase...'}</main>
   }
 
   if (!user) {
     return (
       <LoginPage
-        credentials={demoCredentials}
         error={authError}
+        message={authMessage}
+        busy={authBusy}
+        configured={Boolean(auth)}
         onAuthenticate={handleAuthentication}
+        onResetPassword={handleResetPassword}
+        onClearFeedback={clearAuthFeedback}
       />
     )
   }
@@ -1614,12 +1734,21 @@ function App() {
     <div className="authenticated-shell">
       <header className="session-bar">
         <span className="session-email">{user.email}</span>
-        <button className="session-signout" type="button" onClick={handleSignOut}>
+        <button className="session-signout" type="button" disabled={authBusy} onClick={handleSignOut}>
           Sign out
         </button>
         {authError && <p className="session-error" role="alert">{authError}</p>}
       </header>
-      <MatchDesk />
+      <AccountProfileGate key={user.uid} uid={user.uid} initialDetails={signupProfile} onComplete={clearAuthFeedback}>
+        {(profile) => (
+          <>
+            <p className="account-welcome">Welcome, {profile.fullName}</p>
+            <AdminWorkspace key={user.uid} uid={user.uid}>
+              {(isAdmin) => <MatchDesk isAdmin={isAdmin} />}
+            </AdminWorkspace>
+          </>
+        )}
+      </AccountProfileGate>
     </div>
   )
 }

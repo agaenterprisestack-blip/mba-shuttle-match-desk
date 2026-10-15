@@ -26,20 +26,60 @@ Score progression includes every rally, starting at 0-0. Player bars count only 
 
 ## Authentication
 
-Firebase integration is paused. The app currently uses a public, hardcoded demo login:
+The app uses Firebase Email/Password authentication with account creation, password reset, and sign-out. The old public demo credentials no longer grant access. Firebase restores signed-in sessions across reloads, but match state remains in memory and is cleared on reload or sign-out.
 
-- Email: `demo@shuttlematchdesk.com`
-- Password: `ShuttleDemo21`
+Signup requires a full name (up to 80 characters), email, and password. **Phone number is optional** (up to 32 characters); city and club/team are also optional (up to 80 characters each). You can leave all three optional fields blank. Profile details are stored under `profiles/{uid}` with a creation timestamp. Only the account owner can read that document; other users cannot list or read it. The full name alone is also copied to the shared player roster on sign-in. Phone, city, and club/team are never copied. Passwords are handled by Firebase Authentication, not stored in profile documents.
 
-This is a client-side demo gate, not secure authentication. Do not use it to protect private data. Reloading the page or signing out returns to the login page and clears the in-memory match desk. Account creation and password reset are unavailable in demo mode. No Firebase requests are made by the active app.
+Existing accounts without a profile are prompted to complete these details on their next sign-in. If authentication succeeds but a profile save fails, the app stays signed in and offers profile completion/retry instead of asking for another account. After reloading before the first successful save, unsaved fields must be re-entered. Profile editing is not currently offered.
 
-TODO: Resume Firebase Authentication integration. The SDK dependency, `src/firebase.js`, and environment configuration are retained for this follow-up. Enable Email/Password in Firebase, reconnect the sign-in, account creation, password reset, auth-state listener, and sign-out flows, and verify them end to end before using real accounts.
+Copy `.env.example` to `.env.local` and fill in the Firebase web app values. Keep `.env.local` out of source control. Without configuration, the login form is disabled and explains what is missing.
 
-For that follow-up, copy `.env.example` to `.env.local` and fill in the Firebase web app values if they are not already configured. Keep `.env.local` out of source control. Match data is still held in the browser and is not synced to an account or between devices.
+In Firebase project `shuttlematchdesk`:
+
+1. Enable **Authentication > Sign-in method > Email/Password**.
+2. Add the app hosts under **Authentication > Settings > Authorized domains**, including `localhost`, `127.0.0.1` for development and `agaenterprisestack-blip.github.io` for GitHub Pages.
+3. Create the default Cloud Firestore database in production mode, choosing a suitable region.
+4. Publish the contents of [firestore.rules](./firestore.rules) in **Firestore Database > Rules**. Signed-in users can read shared player names, automatically add their own profile name (unless removed), and create/read only their own private profile. Only designated admins can add arbitrary roster names, delete names, or restore removed names. Clients cannot grant themselves admin access. Merge with any existing project rules instead of overwriting rules for other apps.
+
+For GitHub Pages, set repository Actions variables named `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, and `VITE_FIREBASE_APP_ID` to the web config values, then rebuild/deploy. These web configuration values are public identifiers, not service-account credentials. Never add service-account keys or admin credentials to the frontend.
+
+## Shared player names
+
+In single-match or tournament setup, type in any player-name field to choose a suggested name, or enter a name for the current game only. There are no per-field Save name buttons, and manually typed names are not added to the roster. They are included in match results if an admin explicitly saves the game to the leaderboard. Previously saved roster entries remain available as suggestions. Roster names are stored in the shared Firestore `players` collection and update live across signed-in devices. Leading/trailing and repeated whitespace are normalized; case-insensitive duplicates share one roster entry. Automatic saving requires a working Firebase connection and server confirmation; errors are displayed rather than silently stored locally.
+
+After signup, profile completion, or a later sign-in, the user's full name is automatically added to the same suggestions, unless an admin previously removed that name. Names remain available after sign-out; this is not an online-user list. Existing users appear after their next sign-in (or reload of an active session), not through public access to private profile documents. Automatic sync failures show a retry action without blocking match setup. Names support up to 80 characters, matching the signup full-name limit. Identical names share one suggestion; suggestions are names, not unique account identifiers.
+
+The roster is shared with **every signed-in user**, including newly created accounts. Do not store sensitive information in player names. Each entry records the name, creator UID, and server timestamp. Photos, live games, and tournament brackets are not uploaded. Admin-saved final scores, player sides, and performance counts are uploaded separately for the leaderboard.
+
+## Admin player management
+
+Designated admins see **Admin: Players** next to **Match desk** after signing in and completing their profile. The page lists shared names and supports adding, confirming deletion, and restoring removed names. Duplicate names are not overwritten. Navigating between the admin page and match desk preserves the in-memory match.
+
+Deletion removes the shared suggestion, not the Firebase account, private profile, or names already entered in a match. A `removedPlayers` record (name, deleting admin UID, timestamp) prevents automatic sign-in sync from recreating the name. It applies to all accounts with that same case-insensitive name. Only an admin can restore it, either with **Restore** or by adding the name again. Changes require a server connection; failures are displayed with retry controls.
+
+To grant admin access (Firebase project owner only):
+
+1. Find the intended account in **Firebase Authentication > Users** and copy its **User UID**, not its email or display name.
+2. In **Firestore Database > Data**, create collection `admins` with a document whose ID is that exact UID. Add a string field `role` with value `admin` as a descriptive console field. Document existence grants access; changing its fields does **not** revoke it.
+3. The signed-in app updates access live. To revoke access, **delete the `admins/{uid}` document**. Only Firebase Console or trusted server administration can change admin documents; the web app cannot.
+
+Do not put an email allowlist, admin password, or service-account credentials in the frontend. Deploy the updated rules before using the new page.
+
+## Shared leaderboard
+
+All email/password-authenticated users with completed profiles can open **Leaderboard**. Every player in an admin-saved completed singles or doubles match is included, even without their own login account. Standings persist in Firestore across sign-outs/devices and update live; match play itself remains in memory.
+
+Rank order is **most match wins**, then **exact win percentage**, then **team points for minus points against**. Equal records share a rank. Singles and doubles are combined: both doubles teammates receive one played match, the same win/loss, and their team's score. Individual player points/errors count only attributed rally outcomes; team-only points do not become individual points.
+
+Only admins see **Save final result to leaderboard** in the final-result panel. Check player names and scores before saving. This is an explicit action for each game, including each tournament fixture; unfinished games, byes, and unsaved results do not count. A stable game ID and transaction prevent duplicate counting on repeated clicks/retries. Saved results are immutable in the app, and Undo is disabled after confirmed saving. Reset creates a new game ID and does not erase an earlier saved result. Save before leaving the game or continuing the tournament. Errors are shown and can be retried.
+
+Players are identified by normalized, case-insensitive names, not login email. Use different names for different people; duplicate player names within a match cannot be saved. Roster deletion does not erase historical results. No private profile fields or photos are stored in results. Each `matchResults/{gameId}` document contains format, game-point threshold, final scores, winning side, player names/sides/individual counts, recording admin UID, and server timestamp. The leaderboard derives totals from these documents rather than allowing clients to edit totals.
+
+**Firebase setup:** Publish the updated [firestore.rules](./firestore.rules) before use. Signed-in users may read match results; only designated admins may create valid completed results. Updates/deletions are denied to all web clients. To correct a mistakenly saved result, the project owner must remove that exact document through Firebase Console; standings recalculate automatically. The current all-time leaderboard reads the complete results collection, so read volume grows with saved history.
 
 ## Run locally
 
-Requires Node.js and npm.
+Requires Node.js 22.14 or newer and npm.
 
 ```sh
 npm install
@@ -53,9 +93,10 @@ Open the local URL printed by Vite, usually `http://localhost:5173`.
 ```sh
 npm run build
 npm run lint
+npm test
 ```
 
-The production site is generated in `dist`. Match state is currently held in the browser session and is not synchronized between devices.
+The production site is generated in `dist`. Live match state is held in memory and is not synchronized between devices. The shared player roster and admin-saved leaderboard results are synchronized through Firestore. Unit tests use Node's experimental module-mocking support; Firebase configuration and real cloud save/reload flows should also be checked before deployment.
 
 ## Deploy to Cloudflare Pages
 

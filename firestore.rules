@@ -1,0 +1,101 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    function validResultPlayer(player, side, total) {
+      return player is map
+        && player.keys().hasAll(['name', 'side', 'pointsWon', 'errors'])
+        && player.keys().hasOnly(['name', 'side', 'pointsWon', 'errors'])
+        && player.name is string && player.name.size() > 0 && player.name.size() <= 80
+        && player.name.matches('.*\\S.*')
+        && player.side == side
+        && player.pointsWon is int && player.pointsWon >= 0
+        && player.errors is int && player.errors >= 0
+        && player.pointsWon + player.errors <= total;
+    }
+    match /matchResults/{resultId} {
+      allow read: if request.auth != null;
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasAll(['format', 'target', 'scores', 'winner', 'players', 'createdBy', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['format', 'target', 'scores', 'winner', 'players', 'createdBy', 'createdAt'])
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.format in ['singles', 'doubles']
+        && request.resource.data.target in [20, 21]
+        && request.resource.data.winner in [0, 1]
+        && request.resource.data.scores is list && request.resource.data.scores.size() == 2
+        && request.resource.data.scores[0] is int && request.resource.data.scores[1] is int
+        && request.resource.data.scores[0] >= 0 && request.resource.data.scores[0] <= 30
+        && request.resource.data.scores[1] >= 0 && request.resource.data.scores[1] <= 30
+        && request.resource.data.scores[request.resource.data.winner] >= request.resource.data.target + 1
+        && request.resource.data.scores[request.resource.data.winner] > request.resource.data.scores[1 - request.resource.data.winner]
+        && (request.resource.data.scores[request.resource.data.winner] == 30
+          || request.resource.data.scores[request.resource.data.winner] - request.resource.data.scores[1 - request.resource.data.winner] >= 2)
+        && request.resource.data.players is list
+        && ((request.resource.data.format == 'singles' && request.resource.data.players.size() == 2
+          && validResultPlayer(request.resource.data.players[0], 0, request.resource.data.scores[0] + request.resource.data.scores[1])
+          && validResultPlayer(request.resource.data.players[1], 1, request.resource.data.scores[0] + request.resource.data.scores[1]))
+          || (request.resource.data.format == 'doubles' && request.resource.data.players.size() == 4
+          && validResultPlayer(request.resource.data.players[0], 0, request.resource.data.scores[0] + request.resource.data.scores[1])
+          && validResultPlayer(request.resource.data.players[1], 0, request.resource.data.scores[0] + request.resource.data.scores[1])
+          && validResultPlayer(request.resource.data.players[2], 1, request.resource.data.scores[0] + request.resource.data.scores[1])
+          && validResultPlayer(request.resource.data.players[3], 1, request.resource.data.scores[0] + request.resource.data.scores[1])));
+      allow update, delete: if false;
+    }
+    match /admins/{uid} {
+      allow get: if request.auth != null && request.auth.uid == uid;
+      allow list, create, update, delete: if false;
+    }
+    match /removedPlayers/{playerId} {
+      allow get: if request.auth != null;
+      allow list: if isAdmin();
+      allow create, update: if isAdmin()
+        && request.resource.data.keys().hasAll(['name', 'deletedBy', 'deletedAt'])
+        && request.resource.data.keys().hasOnly(['name', 'deletedBy', 'deletedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 80
+        && request.resource.data.name.matches('.*\\S.*')
+        && request.resource.data.deletedBy == request.auth.uid
+        && request.resource.data.deletedAt == request.time;
+      allow delete: if isAdmin();
+    }
+    match /profiles/{uid} {
+      allow get: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasAll(['fullName', 'phone', 'city', 'club', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['fullName', 'phone', 'city', 'club', 'createdAt'])
+        && request.resource.data.fullName is string
+        && request.resource.data.fullName.size() > 0
+        && request.resource.data.fullName.size() <= 80
+        && request.resource.data.fullName.matches('.*\\S.*')
+        && request.resource.data.phone is string
+        && request.resource.data.phone.size() <= 32
+        && request.resource.data.city is string
+        && request.resource.data.city.size() <= 80
+        && request.resource.data.club is string
+        && request.resource.data.club.size() <= 80
+        && request.resource.data.createdAt == request.time;
+      allow list, update, delete: if false;
+    }
+    match /players/{playerId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && !existsAfter(/databases/$(database)/documents/removedPlayers/$(playerId))
+        && (isAdmin() || request.resource.data.name == get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.fullName)
+        && request.resource.data.keys().hasAll(['name', 'createdBy', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['name', 'createdBy', 'createdAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 80
+        && request.resource.data.name.matches('.*\\S.*')
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time;
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+  }
+}
