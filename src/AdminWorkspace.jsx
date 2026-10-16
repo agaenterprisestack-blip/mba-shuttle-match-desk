@@ -6,6 +6,7 @@ import Leaderboard from './Leaderboard.jsx'
 import ResultPermissions from './ResultPermissions.jsx'
 import { subscribeToResultSaving } from './resultPermissions.js'
 import InfoHint from './InfoHint.jsx'
+import { ClipboardList, ShieldCheck, Trophy, Users } from 'lucide-react'
 
 function PlayerAdminPage() {
   const [players, setPlayers] = useState([])
@@ -138,13 +139,13 @@ function AdminWorkspace({ uid, children }) {
       )}
         <nav className="admin-navigation" aria-label="Workspace">
           <button type="button" aria-current={page === 'match' || (['admin', 'permissions'].includes(page) && !isAdmin) ? 'page' : undefined}
-            onClick={() => setPage('match')}>Match desk</button>
+            onClick={() => setPage('match')}><ClipboardList size={18} aria-hidden="true" />Match desk</button>
           <button type="button" aria-current={page === 'leaderboard' ? 'page' : undefined}
-            onClick={() => setPage('leaderboard')}>Leaderboard</button>
+            onClick={() => setPage('leaderboard')}><Trophy size={18} aria-hidden="true" />Leaderboard</button>
           {isAdmin && <button type="button" aria-current={showingAdmin ? 'page' : undefined}
-            onClick={() => setPage('admin')}>Admin: Players</button>}
+            onClick={() => setPage('admin')}><Users size={18} aria-hidden="true" />Admin: Players</button>}
           {isAdmin && <button type="button" aria-current={showingPermissions ? 'page' : undefined}
-            onClick={() => setPage('permissions')}>Admin: Saving access</button>}
+            onClick={() => setPage('permissions')}><ShieldCheck size={18} aria-hidden="true" />Admin: Saving access</button>}
         </nav>
       <div hidden={showingAdmin || showingPermissions || page === 'leaderboard'}>{children(isAdmin, isAdmin || canSaveGames)}</div>
       {showingAdmin && <PlayerAdminPage />}

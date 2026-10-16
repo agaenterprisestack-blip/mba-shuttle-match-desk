@@ -8,7 +8,9 @@ Player names must be unique across all active slots before starting a match, Cha
 
 Player-name suggestions exclude names entered in any other active slot, including teammates and opponents. Clearing or changing a field makes its previous name available again. Each field retains its own name as a suggestion unless another active slot also uses it; manually typed duplicates are still blocked.
 
-The interface and exported PDF reports use black-and-white foundations, bright lime-green highlights, and lavender accents for the opposing side and missed points. Charts use a darker green for readability on white.
+The interface uses a warm-white sports-club theme, charcoal type, soft lime and lavender player panels, rounded cards, and Lucide outline icons. Leaderboard ranks 1-3 have gold, silver, and bronze badges (including tied ranks), and Challenge result cards highlight the winning opponent. Bundled shuttlecock artwork appears in empty states. Charts and exported PDF reports retain their existing colors and layout.
+
+Game completion shows a brief, decorative confetti burst, which finishes and is removed within 1.8 seconds without blocking controls. Reduced-motion preferences disable confetti and retain static victory and serving indicators. Scoring controls retain their reserved layout when service changes.
 
 Longer interface explanations are collapsed behind labeled **i** info controls on setup, login/profile, leaderboard, results, and admin screens. Click, tap, or focus and press Enter/Space to expand or collapse the details. Errors, connection/save status, duplicate-name warnings, and destructive-action confirmations stay visible.
 
@@ -25,6 +27,8 @@ In the Record rally dialog, green options award a point to the player's side and
 ### Background artwork
 
 The login and app backgrounds use [Badminton shuttlecock](https://commons.wikimedia.org/wiki/File:Badminton_shuttlecock.svg) by dooblem, published under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/). The SVG is bundled locally in `src/assets/shuttlecock.svg`; CSS scaling and translucent overlays keep the interface readable. No external image requests are needed.
+
+Icons are bundled from [Lucide](https://lucide.dev), under ISC with MIT notices for Feather-derived icons. The distributed notices are retained in [public/third-party-notices.txt](./public/third-party-notices.txt), also copied to the production build. No remote fonts, animation service, or image CDN is required.
 
 ## Game performance report
 

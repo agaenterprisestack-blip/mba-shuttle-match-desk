@@ -5,6 +5,8 @@ import { firebaseErrorMessage } from './firebase.js'
 import LeaderboardRecords from './LeaderboardRecords.jsx'
 import SeriesResults from './SeriesResults.jsx'
 import InfoHint from './InfoHint.jsx'
+import EmptyState from './EmptyState.jsx'
+import { Medal, Trophy } from 'lucide-react'
 
 function Leaderboard({ isAdmin = false }) {
   const [kind, setKind] = useState('games')
@@ -43,12 +45,14 @@ function Standings({ kind, onKindChange, isAdmin }) {
   return (
     <main className="page-shell admin-page">
       <p className="eyebrow">{periodLabel} {isTeams ? 'team' : 'player'} performance</p>
-      <h1>{isSeries ? 'Challenge series leaderboard' : 'Leaderboard'}</h1>
-      <label htmlFor="leaderboard-kind">Competition</label>
-      <select id="leaderboard-kind" value={kind} onChange={(event) => onKindChange(event.target.value)}>
-        <option value="games">Individual games</option>
-        <option value="series">Challenge series</option>
-      </select>
+      <h1 className="icon-heading"><Trophy aria-hidden="true" />{isSeries ? 'Challenge series leaderboard' : 'Leaderboard'}</h1>
+      <div className="leaderboard-filters">
+        <label htmlFor="leaderboard-kind">Competition</label>
+        <select id="leaderboard-kind" value={kind} onChange={(event) => onKindChange(event.target.value)}>
+          <option value="games">Individual games</option>
+          <option value="series">Challenge series</option>
+        </select>
+      </div>
       <InfoHint label="About these standings">
       <p>Ranked by {isSeries ? 'series' : 'match'} wins, then win percentage, then {isSeries ? 'games' : 'team points'} difference. Only completed results saved by {isSeries ? 'an admin' : 'an admin or an approved user'} count.</p>
       {isSeries && <p>Best of 3 and best of 5 are combined. Each completed series counts once, separately from individual game standings. Games for/against are games won/lost within the series.</p>}
@@ -87,15 +91,19 @@ function Standings({ kind, onKindChange, isAdmin }) {
       </div> : !ready && <p role="status">Connecting to Firebase. Any displayed standings may be cached.</p>}
       <p role="status">{filtered.results.length} saved {isTeams ? 'doubles ' : ''}{isSeries ? 'series' : 'matches'} · {players.length} {isTeams ? 'pairs' : 'players'} · {periodLabel}</p>
       {filtered.undatedCount > 0 && <p role="status">{filtered.undatedCount} results without a confirmed save date are excluded from this period. They remain visible under All time.</p>}
-      {ready && players.length === 0 && <p>No {isTeams ? 'doubles ' : ''}results for this period. {isSeries ? 'An admin' : 'An admin or an approved user'} can save a completed {isSeries ? 'Challenge series' : 'game'} from its final-result panel.</p>}
+      {ready && players.length === 0 && <EmptyState title="Your next victory starts here">
+        No {isTeams ? 'doubles ' : ''}results for this period. {isSeries ? 'An admin' : 'An admin or an approved user'} can save a completed {isSeries ? 'Challenge series' : 'game'} from its final-result panel.
+      </EmptyState>}
       {players.length > 0 && <div className="leaderboard-scroll" role="region" aria-label={standingsLabel} tabIndex={0}>
         <table className="leaderboard-table">
           <caption>{standingsLabel}: {periodLabel}</caption>
           <thead><tr>
             {['Rank', isTeams ? 'Doubles pair' : 'Player', 'Played', 'Wins', 'Losses', isSeries ? 'Games for' : 'Points for', isSeries ? 'Games against' : 'Points against', '+/-', ...(!isTeams && !isSeries ? ['Player points', 'Errors'] : [])].map((title) => <th scope="col" key={title}>{title}</th>)}
           </tr></thead>
-          <tbody>{pagination.players.map((player) => <tr key={player.key}>
-            <td>{player.rank}</td><th scope="row">{player.name}</th>
+          <tbody>{pagination.players.map((player) => <tr key={player.key} className={player.rank <= 3 ? `podium-row podium-${player.rank}` : undefined}>
+            <td><span className={`rank-badge${player.rank <= 3 ? ` rank-${player.rank}` : ''}`}>
+              {player.rank <= 3 && <Medal size={16} aria-hidden="true" />}{player.rank}
+            </span></td><th scope="row">{player.name}</th>
             <td>{player.played}</td><td>{player.wins}</td><td>{player.losses}</td>
             <td>{player.pointsFor}</td><td>{player.pointsAgainst}</td><td>{player.difference > 0 ? '+' : ''}{player.difference}</td>
             {!isTeams && !isSeries && <><td>{player.pointsWon}</td><td>{player.errors}</td></>}

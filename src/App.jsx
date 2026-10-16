@@ -6,6 +6,9 @@ import { createUserWithEmailAndPassword, onAuthStateChanged, sendPasswordResetEm
 import { auth, firebaseErrorMessage } from './firebase.js'
 import PlayerNameField from './PlayerNameField.jsx'
 import InfoHint from './InfoHint.jsx'
+import { ArrowLeftRight, ArrowRight, CircleCheck, Copy, Download, LogOut, Plus, RotateCcw, Trophy, Undo2 } from 'lucide-react'
+import VictoryCelebration from './VictoryCelebration.jsx'
+import EmptyState from './EmptyState.jsx'
 import { availablePlayerNames, duplicatePlayerNames, playerNameKey } from './playerNames.js'
 import { subscribeToPlayers } from './playerRoster.js'
 import { normalizeProfile, saveAccountProfile } from './accountProfile.js'
@@ -1391,7 +1394,7 @@ function MatchDesk({ isAdmin, canSaveGames = false }) {
               Names that differ only by capitalization or extra spaces are the same player.
             </p>}
             <button className="start-button" type="submit" disabled={duplicates.length > 0}>
-              {isTournamentSetup ? 'Start tournament' : 'Start match'} <span aria-hidden="true">-&gt;</span>
+              {isTournamentSetup ? 'Start tournament' : 'Start match'} <ArrowRight size={20} aria-hidden="true" />
             </button>
           </aside>
         </form>
@@ -1437,10 +1440,10 @@ function MatchDesk({ isAdmin, canSaveGames = false }) {
             disabled={match.rallies.length > 0}
             aria-label="Switch sides"
           >
-            <span aria-hidden="true">&#8644;</span> Switch sides
+            <ArrowLeftRight size={16} aria-hidden="true" /> Switch sides
           </button>
           <button className="reset-button" type="button" onClick={resetMatch} disabled={Boolean(savingResultId) || savedSeriesGameIds.has(match.id)} title="Reset score and point log">
-            <span aria-hidden="true">&#8635;</span> Reset game
+            <RotateCcw size={16} aria-hidden="true" /> Reset game
           </button>
           <button className="text-button" type="button" onClick={returnToSetup}>
             {match.tournamentRef ? 'Bracket' : 'Edit setup'}
@@ -1471,9 +1474,10 @@ function MatchDesk({ isAdmin, canSaveGames = false }) {
       </section>}
 
       {match.winner !== null && (
-        <section className="victory-panel" aria-labelledby="victory-title">
+        <section className="victory-panel game-victory" aria-labelledby="victory-title">
+          <VictoryCelebration key={match.id} />
           <div className="victory-heading">
-            <span className="victory-mark" aria-hidden="true">W</span>
+            <span className="victory-mark" aria-hidden="true"><Trophy size={24} /></span>
             <div>
               <p className="eyebrow">{match.tournamentRef ? `${currentTournamentRound?.name ?? 'Tournament'} · result` : 'Final result'}</p>
               <h2 id="victory-title">{match.teams[match.winner].name} wins</h2>
@@ -1492,12 +1496,15 @@ function MatchDesk({ isAdmin, canSaveGames = false }) {
             </p>
             <div className="result-actions">
               <button className="copy-post-button" type="button" onClick={copyResultPost}>
+                <Copy size={16} aria-hidden="true" />
                 {postCopied ? 'Copied' : postCopyFailed ? 'Select post to copy' : 'Copy post'}
               </button>
               <button className="download-result-button" type="button" onClick={downloadResultTemplate}>
+                <Download size={16} aria-hidden="true" />
                 Download result template PDF
               </button>
               <button className="download-result-button" type="button" onClick={downloadGameLog}>
+                <Download size={16} aria-hidden="true" />
                 Download game log PDF
               </button>
             </div>
@@ -1505,7 +1512,7 @@ function MatchDesk({ isAdmin, canSaveGames = false }) {
           <p className="result-download-status" aria-live="polite">{downloadStatus}</p>
           <div className="leaderboard-save">
             {savedResultIds.has(match.id) ? (
-              <p role="status">Saved to the leaderboard. This final result is locked; reset starts a new game without removing this result.</p>
+              <p className="saved-result-status" role="status"><CircleCheck size={18} aria-hidden="true" />Saved to the leaderboard. This final result is locked; reset starts a new game without removing this result.</p>
             ) : canSaveGames ? (
               <>
                 <p>Check names and scores. Saving locks Undo.</p>
@@ -1609,7 +1616,7 @@ function MatchDesk({ isAdmin, canSaveGames = false }) {
                     title="Switch player positions"
                     aria-label={`Switch ${team.name || `side ${teamIndex + 1}`} player positions`}
                   >
-                    <span aria-hidden="true">&#8646;</span>
+                    <ArrowLeftRight size={18} aria-hidden="true" />
                   </button>
                 )}
               </div>
@@ -1620,7 +1627,7 @@ function MatchDesk({ isAdmin, canSaveGames = false }) {
                 disabled={match.winner !== null}
                 aria-label={`Add one point to ${team.name || `side ${teamIndex + 1}`}`}
               >
-                <span className="plus-sign" aria-hidden="true">+</span>
+                <Plus className="plus-sign" size={22} aria-hidden="true" />
                 <span>Add point</span>
               </button>
             </article>
@@ -1640,7 +1647,7 @@ function MatchDesk({ isAdmin, canSaveGames = false }) {
           {match.winner === null && match.format === 'doubles' && <span className="serve-court-label">{match.scores[match.serveSide] % 2 === 0 ? 'Right service court' : 'Left service court'}</span>}
         </div>
         <button className="undo-button" type="button" onClick={undoPoint} disabled={!undoStack.length || savedResultIds.has(match.id) || savedSeriesGameIds.has(match.id) || savingResultId === match.id}>
-          <span aria-hidden="true">&#8630;</span> Undo point
+          <Undo2 size={18} aria-hidden="true" /> Undo point
         </button>
       </section>
 
@@ -1670,7 +1677,7 @@ function MatchDesk({ isAdmin, canSaveGames = false }) {
             ))}
           </ol>
         ) : (
-          <p className="rally-empty">No points yet. Tap a side to record the first rally.</p>
+          <EmptyState title="Ready, set, rally">No points yet. Tap a side to record the first rally.</EmptyState>
         )}
       </section>
 
@@ -1819,7 +1826,7 @@ function App() {
       <header className="session-bar">
         <span className="session-email">{user.email}</span>
         <button className="session-signout" type="button" disabled={authBusy} onClick={handleSignOut}>
-          Sign out
+          <LogOut size={15} aria-hidden="true" />Sign out
         </button>
         {authError && <p className="session-error" role="alert">{authError}</p>}
       </header>

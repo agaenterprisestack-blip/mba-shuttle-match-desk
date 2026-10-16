@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { paginateLeaderboard, resultSideNames } from './leaderboard.js'
 import InfoHint from './InfoHint.jsx'
+import { Trophy } from 'lucide-react'
+import EmptyState from './EmptyState.jsx'
 
 const savedDate = (result) => result.createdAt instanceof Date
   ? result.createdAt : result.createdAt?.toDate?.()
@@ -15,14 +17,18 @@ function SeriesResults({ results, periodLabel }) {
       <h2 id="series-results-title">Challenge series results</h2>
       <p>{periodLabel} · Newest first</p>
       <InfoHint label="Reading series results"><p>Opponent-by-opponent results. Game scores follow the same side order as the opponents. Results are ordered by save date.</p></InfoHint>
-      {!results.length && <p>No saved Challenge series for this selection.</p>}
+      {!results.length && <EmptyState title="A new challenge awaits">No saved Challenge series for this selection.</EmptyState>}
       <ol className="series-results-list" start={pagination.first || 1}>
         {pagination.players.map((result) => {
           const sides = resultSideNames(result)
           const date = savedDate(result)
           return <li key={result.id}>
-            <h3>{sides[0]} <span>vs</span> {sides[1]}</h3>
-            <p><strong>Series score: {result.scores.join(' - ')}</strong> · Winner: <strong>{sides[result.winner]}</strong></p>
+            <h3 className="series-opponents">
+              <span className={result.winner === 0 ? 'series-winner' : 'series-opponent'}>{sides[0]}</span>
+              <span className="versus-badge">vs</span>
+              <span className={result.winner === 1 ? 'series-winner' : 'series-opponent'}>{sides[1]}</span>
+            </h3>
+            <p><strong>Series score: {result.scores.join(' - ')}</strong> · <span className="winner-tag"><Trophy size={15} aria-hidden="true" />Winner: <strong>{sides[result.winner]}</strong></span></p>
             <p>{result.format === 'doubles' ? 'Doubles' : 'Singles'} · Best of {result.bestOf} · Saved: {date
               ? <time dateTime={date.toISOString()}>{date.toLocaleString()}</time>
               : 'Date not confirmed'}</p>

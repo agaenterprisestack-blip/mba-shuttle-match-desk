@@ -2,6 +2,7 @@ import { useState } from 'react'
 import ProfileFields from './ProfileFields.jsx'
 import { emptyProfile } from './accountProfile.js'
 import InfoHint from './InfoHint.jsx'
+import { ArrowRight, Check, Sparkles } from 'lucide-react'
 
 function LoginPage({ error, message, busy, configured, onAuthenticate, onResetPassword, onClearFeedback }) {
   const [email, setEmail] = useState('')
@@ -21,9 +22,13 @@ function LoginPage({ error, message, busy, configured, onAuthenticate, onResetPa
           <span>SHUTTLE<br />MATCH DESK</span>
         </div>
         <div className="login-story-copy">
-          <p className="eyebrow">Every rally, remembered</p>
+          <p className="eyebrow icon-heading"><Sparkles size={16} aria-hidden="true" />Every rally, remembered</p>
           <h1>Make every<br />match count.</h1>
           <p>One clear view of the score, the serve, and the story of your game.</p>
+          <div className="login-feature-tags" aria-label="App highlights">
+            <span><Check size={14} aria-hidden="true" />Live scoring</span>
+            <span><Check size={14} aria-hidden="true" />Challenge your crew</span>
+          </div>
         </div>
         <div className="court-art" aria-hidden="true">
           <div className="court-lines">
@@ -102,7 +107,7 @@ function LoginPage({ error, message, busy, configured, onAuthenticate, onResetPa
 
             <button className="login-submit" type="submit" disabled={!configured || busy}>
               {busy ? 'Please wait...' : creatingAccount ? 'Create account' : 'Sign in'}
-              <span aria-hidden="true">-&gt;</span>
+              <ArrowRight size={20} aria-hidden="true" />
             </button>
           </form>
 
