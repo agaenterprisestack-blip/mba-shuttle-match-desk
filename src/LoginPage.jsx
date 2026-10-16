@@ -54,7 +54,7 @@ function LoginPage({ error, message, busy, configured, onAuthenticate, onResetPa
           <InfoHint label="Shared names & privacy">
             <p>Sign in with a Firebase account to save and reuse player names across devices.</p>
             <p>Saved names are visible to every signed-in user. Do not save private information.</p>
-            <p>Your profile's full name is automatically included in player-name suggestions when you sign in, unless an admin has removed it.</p>
+            <p>Your nickname is automatically included in player-name suggestions when you sign in, unless an admin has removed it. Your full name is visible to admins in the saving-access list.</p>
             <p>Your private profile and shared player names are saved in Firebase. Saved final results and player performance are shared in the leaderboard. Photos and unsaved games stay on this device until reload or sign-out.</p>
           </InfoHint>
 

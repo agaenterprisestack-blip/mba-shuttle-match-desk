@@ -1,17 +1,19 @@
 import { useId } from 'react'
 import InfoHint from './InfoHint.jsx'
 
-function ProfileFields({ value, onChange, disabled }) {
+function ProfileFields({ value, onChange, disabled, nicknameOnly = false }) {
   const id = useId()
   return (
     <fieldset className="profile-fields" disabled={disabled}>
       <legend>Basic profile details</legend>
       {[
         { key: 'fullName', label: 'Full name', autoComplete: 'name', required: true, maxLength: 80 },
+        { key: 'nickname', label: 'Nickname', autoComplete: 'nickname', required: true, maxLength: 80 },
         { key: 'phone', label: 'Phone number (optional)', autoComplete: 'tel', type: 'tel', maxLength: 32 },
         { key: 'city', label: 'City (optional)', autoComplete: 'address-level2', maxLength: 80 },
         { key: 'club', label: 'Club / team (optional)', autoComplete: 'organization', maxLength: 80 },
-      ].map(({ key, label, autoComplete, required = false, type = 'text', maxLength }) => (
+      ].filter(({ key }) => !nicknameOnly || key === 'nickname')
+        .map(({ key, label, autoComplete, required = false, type = 'text', maxLength }) => (
         <div className="profile-field" key={key}>
           <label htmlFor={`${id}-${key}`}>{label}</label>
           <input
@@ -27,8 +29,8 @@ function ProfileFields({ value, onChange, disabled }) {
           />
         </div>
       ))}
-      <p className="profile-privacy">Your full name is shared in player suggestions.</p>
-      <InfoHint label="Profile privacy"><p>Your full name is added to player suggestions for all signed-in users, even after you sign out, unless an admin removes it. Phone number, city, and club/team stay private.</p></InfoHint>
+      <p className="profile-privacy">Your nickname is shared in player suggestions.</p>
+      <InfoHint label="Profile privacy"><p>Your nickname is added to player suggestions for all signed-in users, even after you sign out, unless an admin removes it. Your full name is visible to admins in the saving-access list. Phone number, city, and club/team stay private.</p></InfoHint>
     </fieldset>
   )
 }

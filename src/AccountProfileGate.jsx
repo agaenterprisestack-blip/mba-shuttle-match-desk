@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { emptyProfile, loadAccountProfile, saveAccountProfile } from './accountProfile.js'
+import { emptyProfile, loadAccountProfile, needsNickname, saveAccountProfile } from './accountProfile.js'
 import { firebaseErrorMessage } from './firebase.js'
 import ProfileFields from './ProfileFields.jsx'
 import { savePlayerName } from './playerRoster.js'
@@ -9,6 +9,7 @@ function AccountProfileGate({ uid, initialDetails, onComplete, children }) {
   const [profile, setProfile] = useState(null)
   const [details, setDetails] = useState(initialDetails || emptyProfile)
   const [loading, setLoading] = useState(true)
+  const [addingNickname, setAddingNickname] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [retry, setRetry] = useState(0)
@@ -29,7 +30,7 @@ function AccountProfileGate({ uid, initialDetails, onComplete, children }) {
   useEffect(() => {
     if (!profile) return
     let active = true
-    savePlayerName(profile.fullName).catch((saveError) => {
+    savePlayerName(profile.nickname).catch((saveError) => {
       if (active) setRosterError(firebaseErrorMessage(saveError))
     })
     return () => { active = false }
@@ -39,7 +40,14 @@ function AccountProfileGate({ uid, initialDetails, onComplete, children }) {
     let active = true
     loadAccountProfile(uid).then((savedProfile) => {
       if (!active) return
-      setProfile(savedProfile)
+      if (savedProfile && needsNickname(savedProfile)) {
+        setDetails({ ...emptyProfile, ...savedProfile, nickname: '' })
+        setAddingNickname(true)
+        setProfile(null)
+      } else {
+        setProfile(savedProfile)
+        setAddingNickname(false)
+      }
       setLoading(false)
     }).catch((loadError) => {
       if (!active) return
@@ -87,10 +95,12 @@ function AccountProfileGate({ uid, initialDetails, onComplete, children }) {
 
   return (
     <main className="profile-setup">
-      <h1>Complete your profile</h1>
-      <p>Your account is signed in. Save your details to continue; no need to create another account.</p>
+      <h1>{addingNickname ? 'Add your player nickname' : 'Complete your profile'}</h1>
+      <p>{addingNickname
+        ? 'Choose the nickname to show in player suggestions. Your existing profile details will stay unchanged.'
+        : 'Your account is signed in. Save your details to continue; no need to create another account.'}</p>
       <form className="login-form" onSubmit={handleSave}>
-        <ProfileFields value={details} onChange={setDetails} disabled={busy} />
+        <ProfileFields value={details} onChange={setDetails} disabled={busy} nicknameOnly={addingNickname} />
         {error && (
           <div className="auth-error" role="alert">
             <p>{error} Your details have not been confirmed saved.</p>

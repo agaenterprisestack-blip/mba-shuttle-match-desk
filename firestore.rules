@@ -144,11 +144,16 @@ service cloud.firestore {
         && request.resource.data.deletedAt == request.time;
       allow delete: if isAdmin();
     }
+    function validNickname(nickname) {
+      return nickname is string && nickname.size() > 0 && nickname.size() <= 80
+        && nickname.matches('.*\\S.*');
+    }
     match /profiles/{uid} {
       allow get: if request.auth != null && request.auth.uid == uid;
       allow create: if request.auth != null && request.auth.uid == uid
-        && request.resource.data.keys().hasAll(['fullName', 'phone', 'city', 'club', 'createdAt'])
-        && request.resource.data.keys().hasOnly(['fullName', 'phone', 'city', 'club', 'createdAt'])
+        && request.resource.data.keys().hasAll(['fullName', 'nickname', 'phone', 'city', 'club', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['fullName', 'nickname', 'phone', 'city', 'club', 'createdAt'])
+        && validNickname(request.resource.data.nickname)
         && request.resource.data.fullName is string
         && request.resource.data.fullName.size() > 0
         && request.resource.data.fullName.size() <= 80
@@ -160,13 +165,17 @@ service cloud.firestore {
         && request.resource.data.club is string
         && request.resource.data.club.size() <= 80
         && request.resource.data.createdAt == request.time;
-      allow list, update, delete: if false;
+      allow update: if request.auth != null && request.auth.uid == uid
+        && !validNickname(resource.data.get('nickname', ''))
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nickname'])
+        && validNickname(request.resource.data.nickname);
+      allow list, delete: if false;
     }
     match /players/{playerId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null
         && !existsAfter(/databases/$(database)/documents/removedPlayers/$(playerId))
-        && (isAdmin() || request.resource.data.name == get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.fullName)
+        && (isAdmin() || request.resource.data.name == get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.nickname)
         && request.resource.data.keys().hasAll(['name', 'createdBy', 'createdAt'])
         && request.resource.data.keys().hasOnly(['name', 'createdBy', 'createdAt'])
         && request.resource.data.name is string
