@@ -1,16 +1,28 @@
 import { collection, doc, onSnapshot, runTransaction, serverTimestamp } from 'firebase/firestore'
 import { auth, db } from './firebase.js'
 import { completedMatchResult } from './leaderboard.js'
+import { completedSeriesResult } from './matchSeries.js'
 
 export const saveLeaderboardResult = async (match) => {
+  return saveResult('matchResults', match.id, completedMatchResult(match))
+}
+
+export const saveChallengeSeriesResult = async (match) => {
+  return saveResult('seriesResults', match.series?.id, completedSeriesResult(match))
+}
+
+const saveResult = async (collectionName, id, result) => {
   if (!auth?.currentUser || !db) throw new Error('Sign in to save a leaderboard result.')
-  if (!match.id) throw new Error('This match has no result identifier. Start a new game.')
-  const result = completedMatchResult(match)
+  if (!id) throw new Error('This match has no result identifier. Start a new game.')
   const uid = auth.currentUser.uid
-  const reference = doc(db, 'matchResults', match.id)
+  const reference = doc(db, collectionName, id)
   await runTransaction(db, async (transaction) => {
     const admin = await transaction.get(doc(db, 'admins', uid))
-    if (!admin.exists()) throw new Error('Only admins can save leaderboard results.')
+    if (!admin.exists()) {
+      if (collectionName !== 'matchResults') throw new Error('Only admins can save Challenge series results.')
+      const permission = await transaction.get(doc(db, 'resultWriters', uid))
+      if (!permission.exists()) throw new Error('An admin must grant individual-game saving access.')
+    }
     const existing = await transaction.get(reference)
     if (existing.exists()) {
       const stored = existing.data()
@@ -23,14 +35,20 @@ export const saveLeaderboardResult = async (match) => {
   })
 }
 
-export const subscribeToMatchResults = (onResults, onError) => onSnapshot(
-  collection(db, 'matchResults'),
+export const subscribeToMatchResults = (onResults, onError, kind = 'games') => onSnapshot(
+  collection(db, resultCollection(kind)),
   { includeMetadataChanges: true },
   (snapshot) => onResults(snapshot.docs.map((entry) => ({ ...entry.data(), id: entry.id })), snapshot.metadata.fromCache),
   onError,
 )
 
-export const deleteLeaderboardResults = async (ids) => {
+const resultCollection = (kind) => {
+  if (!['games', 'series'].includes(kind)) throw new Error('Choose a valid leaderboard.')
+  return kind === 'series' ? 'seriesResults' : 'matchResults'
+}
+
+export const deleteLeaderboardResults = async (ids, kind = 'games') => {
+  const collectionName = resultCollection(kind)
   if (!auth?.currentUser || !db) throw new Error('Sign in to delete leaderboard records.')
   if (!Array.isArray(ids) || ids.length === 0 || ids.some((id) => typeof id !== 'string' || !id || id.includes('/'))) {
     throw new Error('Choose valid saved match records to delete.')
@@ -45,7 +63,7 @@ export const deleteLeaderboardResults = async (ids) => {
       await runTransaction(db, async (transaction) => {
         const admin = await transaction.get(doc(db, 'admins', uid))
         if (!admin.exists()) throw new Error('Only admins can delete leaderboard records.')
-        for (const id of group) transaction.delete(doc(db, 'matchResults', id))
+        for (const id of group) transaction.delete(doc(db, collectionName, id))
       })
       deleted += group.length
     }

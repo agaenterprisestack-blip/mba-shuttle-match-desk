@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import ProfileFields from './ProfileFields.jsx'
 import { emptyProfile } from './accountProfile.js'
+import InfoHint from './InfoHint.jsx'
 
 function LoginPage({ error, message, busy, configured, onAuthenticate, onResetPassword, onClearFeedback }) {
   const [email, setEmail] = useState('')
@@ -45,12 +46,12 @@ function LoginPage({ error, message, busy, configured, onAuthenticate, onResetPa
             {creatingAccount ? 'Add your basic details to get started.' : 'Sign in to get back to your match desk.'}
           </p>
 
-          <div className="auth-notice">
-            <strong>Shared player roster</strong>
-            <span>Sign in with a Firebase account to save and reuse player names across devices.</span>
-            <span>Saved names are visible to every signed-in user. Do not save private information.</span>
-            <span>Your profile's full name is automatically included in player-name suggestions when you sign in, unless an admin has removed it.</span>
-          </div>
+          <InfoHint label="Shared names & privacy">
+            <p>Sign in with a Firebase account to save and reuse player names across devices.</p>
+            <p>Saved names are visible to every signed-in user. Do not save private information.</p>
+            <p>Your profile's full name is automatically included in player-name suggestions when you sign in, unless an admin has removed it.</p>
+            <p>Your private profile and shared player names are saved in Firebase. Saved final results and player performance are shared in the leaderboard. Photos and unsaved games stay on this device until reload or sign-out.</p>
+          </InfoHint>
 
           <form className="login-form" onSubmit={handleSubmit}>
             {creatingAccount && (
@@ -114,7 +115,6 @@ function LoginPage({ error, message, busy, configured, onAuthenticate, onResetPa
               {creatingAccount ? 'Sign in' : 'Create account'}
             </button>
           </p>
-          <p className="login-privacy">Your private profile and shared player names are saved in Firebase. Admin-saved final results and player performance are shared in the leaderboard. Photos and unsaved games stay on this device until reload or sign-out.</p>
         </div>
       </section>
     </main>

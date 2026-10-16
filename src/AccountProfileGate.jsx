@@ -3,6 +3,7 @@ import { emptyProfile, loadAccountProfile, saveAccountProfile } from './accountP
 import { firebaseErrorMessage } from './firebase.js'
 import ProfileFields from './ProfileFields.jsx'
 import { savePlayerName } from './playerRoster.js'
+import { registerSignedInUser } from './resultPermissions.js'
 
 function AccountProfileGate({ uid, initialDetails, onComplete, children }) {
   const [profile, setProfile] = useState(null)
@@ -13,6 +14,17 @@ function AccountProfileGate({ uid, initialDetails, onComplete, children }) {
   const [retry, setRetry] = useState(0)
   const [rosterError, setRosterError] = useState('')
   const [rosterRetry, setRosterRetry] = useState(0)
+  const [directoryError, setDirectoryError] = useState('')
+  const [directoryRetry, setDirectoryRetry] = useState(0)
+
+  useEffect(() => {
+    if (!profile) return
+    let active = true
+    registerSignedInUser(profile.fullName).catch((failure) => {
+      if (active) setDirectoryError(firebaseErrorMessage(failure))
+    })
+    return () => { active = false }
+  }, [profile, directoryRetry])
 
   useEffect(() => {
     if (!profile) return
@@ -54,6 +66,12 @@ function AccountProfileGate({ uid, initialDetails, onComplete, children }) {
   if (loading) return <main className="auth-loading" role="status">Loading your profile...</main>
   if (profile) return (
     <>
+      {directoryError && <div className="account-welcome auth-error" role="alert">
+        <p>Your name could not be registered in the admin saving-access list. {directoryError}</p>
+        <button type="button" onClick={() => {
+          setDirectoryError(''); setDirectoryRetry((current) => current + 1)
+        }}>Retry registering my name</button>
+      </div>}
       {rosterError && (
         <div className="account-welcome auth-error" role="alert">
           <p>Your profile is saved, but your name could not be added to player suggestions. {rosterError}</p>

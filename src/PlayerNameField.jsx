@@ -1,6 +1,6 @@
 import { useId } from 'react'
 
-function PlayerNameField({ name, playerIndex, teamIndex, onChange, savedNames }) {
+function PlayerNameField({ name, playerIndex, teamIndex, onChange, savedNames, duplicate = false }) {
   const id = useId()
 
   return (
@@ -13,6 +13,8 @@ function PlayerNameField({ name, playerIndex, teamIndex, onChange, savedNames })
           value={name}
           placeholder={`Enter player ${playerIndex + 1} name`}
           maxLength={80}
+          aria-invalid={duplicate}
+          aria-describedby={duplicate ? 'duplicate-player-error' : undefined}
           onChange={(event) => onChange(event.target.value)}
           aria-label={`Side ${teamIndex + 1} player ${playerIndex + 1} name`}
         />

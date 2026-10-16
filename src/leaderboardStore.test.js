@@ -7,11 +7,13 @@ const timestamp = {}
 const unsubscribe = mock.fn()
 const onSnapshot = mock.fn(() => unsubscribe)
 let admin = true
+let writer = false
 let stored = null
 const transaction = {
   get: mock.fn(async (reference) => reference.collection === 'admins'
     ? { exists: () => admin }
-    : { exists: () => stored !== null, data: () => stored }),
+    : reference.collection === 'resultWriters' ? { exists: () => writer }
+      : { exists: () => stored !== null, data: () => stored }),
   set: mock.fn((reference, data) => { stored = data }),
   delete: mock.fn(),
 }
@@ -23,7 +25,7 @@ mock.module('firebase/firestore', { namedExports: {
   runTransaction: async (database, callback) => callback(transaction),
   serverTimestamp: () => timestamp,
 } })
-const { saveLeaderboardResult, subscribeToMatchResults, deleteLeaderboardResults } = await import('./leaderboardStore.js')
+const { saveLeaderboardResult, saveChallengeSeriesResult, subscribeToMatchResults, deleteLeaderboardResults } = await import('./leaderboardStore.js')
 const game = {
   id: 'unique-game', format: 'singles', target: 20, scores: [22, 10], winner: 0,
   teams: [{ players: [{ name: 'Alex' }] }, { players: [{ name: 'Sam' }] }],
@@ -42,9 +44,9 @@ test('saves a final result once with authenticated provenance; retries do not do
   assert.equal(transaction.set.mock.callCount(), 1)
 })
 
-test('rejects non-admin and signed-out saves and invalid match IDs', async () => {
+test('rejects unapproved and signed-out saves and invalid match IDs', async () => {
   admin = false
-  await assert.rejects(saveLeaderboardResult(game), /Only admins/)
+  await assert.rejects(saveLeaderboardResult(game), /grant individual-game saving access/)
   admin = true
   const user = auth.currentUser
   auth.currentUser = null
@@ -54,6 +56,25 @@ test('rejects non-admin and signed-out saves and invalid match IDs', async () =>
     auth.currentUser = user
   }
   await assert.rejects(saveLeaderboardResult({ ...game, id: null }), /identifier/)
+})
+
+test('approved users can save individual games but cannot save series or delete records; revocation blocks retries', async () => {
+  admin = false
+  writer = true
+  stored = null
+  try {
+    await saveLeaderboardResult(game)
+    assert.equal(stored.createdBy, auth.currentUser.uid)
+    await assert.rejects(saveChallengeSeriesResult({
+      ...game, series: { id: 'denied-series', bestOf: 3, games: [{ winner: 0, scores: [21, 10] }] },
+    }), /Only admins/)
+    await assert.rejects(deleteLeaderboardResults(['unique-game']), /Only admins/)
+    writer = false
+    await assert.rejects(saveLeaderboardResult(game), /grant individual-game saving access/)
+  } finally {
+    admin = true
+    writer = false
+  }
 })
 
 test('forwards saved results, cache status and Firebase listener errors', () => {
@@ -117,4 +138,48 @@ test('deletion failures propagate and partially completed resets report their pr
   transaction.get.mock.mockImplementationOnce(async () => { throw new Error('connection lost') }, transaction.get.mock.callCount() + 1)
   await assert.rejects(deleteLeaderboardResults(Array.from({ length: 101 }, (_, index) => `result-${index}`)),
     /100 selected records were deleted.*connection lost/)
+})
+
+const challenge = { ...game, series: { id: 'series-id', bestOf: 3, games: [{ winner: 0, scores: [21, 10] }] } }
+
+test('Challenge series save uses its stable ID and separate collection with idempotent retries', async () => {
+  stored = null
+  transaction.set.mock.resetCalls()
+  await saveChallengeSeriesResult(challenge)
+  await saveChallengeSeriesResult(challenge)
+  assert.equal(transaction.set.mock.callCount(), 1)
+  assert.deepEqual(transaction.set.mock.calls[0].arguments[0], { database: db, collection: 'seriesResults', id: 'series-id' })
+  assert.deepEqual(stored.scores, [2, 0])
+  assert.equal(stored.createdAt, timestamp)
+  assert.equal(stored.createdBy, 'admin-user')
+  await assert.rejects(saveChallengeSeriesResult({ ...challenge, scores: [21, 12] }), /different saved final result/)
+  await assert.rejects(saveChallengeSeriesResult({ ...challenge, series: { ...challenge.series, id: null } }), /identifier/)
+})
+
+test('Challenge series save rejects non-admin and signed-out callers and propagates backend errors', async () => {
+  admin = false
+  await assert.rejects(saveChallengeSeriesResult(challenge), /Only admins/)
+  admin = true
+  const user = auth.currentUser
+  auth.currentUser = null
+  try {
+    await assert.rejects(saveChallengeSeriesResult(challenge), /Sign in/)
+  } finally {
+    auth.currentUser = user
+  }
+  transaction.get.mock.mockImplementationOnce(async () => { throw new Error('permission-denied') })
+  await assert.rejects(saveChallengeSeriesResult(challenge), /permission-denied/)
+})
+
+test('Challenge series subscriptions and deletions are isolated from individual games', async () => {
+  const receive = mock.fn()
+  subscribeToMatchResults(receive, mock.fn(), 'series')
+  const call = onSnapshot.mock.calls.at(-1).arguments
+  assert.equal(call[0].path, 'seriesResults')
+  call[2]({ docs: [{ id: 'series-id', data: () => stored }], metadata: { fromCache: false } })
+  assert.equal(receive.mock.calls[0].arguments[0][0].id, 'series-id')
+  transaction.delete.mock.resetCalls()
+  await deleteLeaderboardResults(['series-id'], 'series')
+  assert.equal(transaction.delete.mock.calls[0].arguments[0].collection, 'seriesResults')
+  await assert.rejects(deleteLeaderboardResults(['id'], 'invalid'), /valid leaderboard/)
 })

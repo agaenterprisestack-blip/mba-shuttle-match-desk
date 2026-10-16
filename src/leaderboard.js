@@ -7,6 +7,9 @@ export const leaderboardPeriods = [
   { value: 'year', label: 'This year' },
 ]
 
+export const resultSideNames = (result) => [0, 1].map((side) => result.players
+  .filter((player) => player.side === side).map((player) => player.name).join(' / '))
+
 export const filterLeaderboardResults = (results, period, now = new Date()) => {
   if (!leaderboardPeriods.some((entry) => entry.value === period)) {
     throw new Error('Choose a valid leaderboard period.')

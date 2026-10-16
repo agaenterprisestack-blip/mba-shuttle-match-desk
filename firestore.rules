@@ -16,9 +16,70 @@ service cloud.firestore {
         && player.errors is int && player.errors >= 0
         && player.pointsWon + player.errors <= total;
     }
+    function validSeriesGame(game, target) {
+      let scores = game.scores;
+      let winner = game.winner;
+      let high = scores[winner];
+      let low = scores[1 - winner];
+      return game == {'winner': winner, 'scores': scores}
+        && winner in [0, 1]
+        && scores is list && scores.size() == 2
+        && scores[0] is int && scores[1] is int
+        && high <= 30 && low >= 0
+        && high >= target + 1 && high > low
+        && (high == 30 || high - low >= 2);
+    }
+    function seriesWins(games, side) {
+      return (games[0].winner == side ? 1 : 0)
+        + (games[1].winner == side ? 1 : 0)
+        + (games.size() > 2 && games[2].winner == side ? 1 : 0)
+        + (games.size() > 3 && games[3].winner == side ? 1 : 0)
+        + (games.size() > 4 && games[4].winner == side ? 1 : 0);
+    }
+    function validSeries(data) {
+      let games = data.games;
+      let count = games.size();
+      let scores = data.scores;
+      let players = data.players;
+      let needed = data.bestOf == 3 ? 2 : 3;
+      let wins = seriesWins(games, 0);
+      return data.keys().hasOnly(['format', 'target', 'bestOf', 'scores', 'winner', 'players', 'games', 'createdBy', 'createdAt'])
+        && data.createdBy == request.auth.uid && data.createdAt == request.time
+        && data.format in ['singles', 'doubles'] && data.target in [20, 14]
+        && data.bestOf in [3, 5] && data.winner in [0, 1]
+        && games is list && count >= needed && count <= data.bestOf
+        && validSeriesGame(games[0], data.target)
+        && validSeriesGame(games[1], data.target)
+        && (count < 3 || validSeriesGame(games[2], data.target))
+        && (count < 4 || validSeriesGame(games[3], data.target))
+        && (count < 5 || validSeriesGame(games[4], data.target))
+        && scores is list && scores.size() == 2
+        && scores[0] == wins && scores[1] == count - wins
+        && scores[data.winner] == needed && scores[1 - data.winner] < needed
+        && games[count - 1].winner == data.winner
+        && players is list
+        && ((data.format == 'singles' && players.size() == 2
+          && validSeriesPlayer(players[0], 0) && validSeriesPlayer(players[1], 1))
+          || (data.format == 'doubles' && players.size() == 4
+          && validSeriesPlayer(players[0], 0) && validSeriesPlayer(players[1], 0)
+          && validSeriesPlayer(players[2], 1) && validSeriesPlayer(players[3], 1)));
+    }
+    function validSeriesPlayer(player, side) {
+      let name = player.name;
+      return player == {'name': name, 'side': side, 'pointsWon': 0, 'errors': 0}
+        && name is string && name.size() > 0 && name.size() <= 80
+        && name.matches('.*\\S.*');
+    }
+    match /seriesResults/{seriesId} {
+      allow read: if request.auth != null;
+      allow create: if isAdmin() && validSeries(request.resource.data);
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
     match /matchResults/{resultId} {
       allow read: if request.auth != null;
-      allow create: if isAdmin()
+      allow create: if (isAdmin() || (request.auth != null
+          && exists(/databases/$(database)/documents/resultWriters/$(request.auth.uid))))
         && request.resource.data.keys().hasAll(['format', 'target', 'scores', 'winner', 'players', 'createdBy', 'createdAt'])
         && request.resource.data.keys().hasOnly(['format', 'target', 'scores', 'winner', 'players', 'createdBy', 'createdAt'])
         && request.resource.data.createdBy == request.auth.uid
@@ -49,6 +110,25 @@ service cloud.firestore {
     match /admins/{uid} {
       allow get: if request.auth != null && request.auth.uid == uid;
       allow list, create, update, delete: if false;
+    }
+    match /signedInUsers/{uid} {
+      allow get: if request.auth != null && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['fullName', 'lastSeenAt'])
+        && request.resource.data.fullName == get(/databases/$(database)/documents/profiles/$(uid)).data.fullName
+        && request.resource.data.lastSeenAt == request.time;
+      allow delete: if false;
+    }
+    match /resultWriters/{uid} {
+      allow get: if request.auth != null && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if isAdmin()
+        && exists(/databases/$(database)/documents/signedInUsers/$(uid))
+        && request.resource.data.keys().hasOnly(['grantedBy', 'grantedAt'])
+        && request.resource.data.grantedBy == request.auth.uid
+        && request.resource.data.grantedAt == request.time;
+      allow delete: if isAdmin();
     }
     match /removedPlayers/{playerId} {
       allow get: if request.auth != null;

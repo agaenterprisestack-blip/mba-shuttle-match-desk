@@ -5,11 +5,14 @@ import shuttlecock from './assets/shuttlecock.svg'
 import { createUserWithEmailAndPassword, onAuthStateChanged, sendPasswordResetEmail, signInWithEmailAndPassword, signOut } from 'firebase/auth'
 import { auth, firebaseErrorMessage } from './firebase.js'
 import PlayerNameField from './PlayerNameField.jsx'
+import InfoHint from './InfoHint.jsx'
+import { availablePlayerNames, duplicatePlayerNames, playerNameKey } from './playerNames.js'
 import { subscribeToPlayers } from './playerRoster.js'
 import { normalizeProfile, saveAccountProfile } from './accountProfile.js'
 import AccountProfileGate from './AccountProfileGate.jsx'
 import AdminWorkspace from './AdminWorkspace.jsx'
-import { saveLeaderboardResult } from './leaderboardStore.js'
+import { advanceMatchSeries, seriesSummary } from './matchSeries.js'
+import { saveLeaderboardResult, saveChallengeSeriesResult } from './leaderboardStore.js'
 
 const createTeams = () => [
   {
@@ -581,7 +584,8 @@ const rallyOutcomes = [
   { label: 'Smash out', kind: 'error' },
 ]
 
-function MatchDesk({ isAdmin }) {
+function MatchDesk({ isAdmin, canSaveGames = false }) {
+  const [bestOf, setBestOf] = useState(1)
   const [setupMode, setSetupMode] = useState('match')
   const [format, setFormat] = useState('doubles')
   const [target, setTarget] = useState(20)
@@ -603,6 +607,25 @@ function MatchDesk({ isAdmin }) {
   const [savingResultId, setSavingResultId] = useState(null)
   const [resultError, setResultError] = useState(null)
   const savingResultRef = useRef(null)
+  const [savedSeriesGameIds, setSavedSeriesGameIds] = useState(() => new Set())
+  const [seriesError, setSeriesError] = useState(null)
+
+  const saveSeries = async () => {
+    if (!match?.series || savingResultRef.current || savedSeriesGameIds.has(match.id)) return
+    const game = match
+    savingResultRef.current = game.id
+    setSavingResultId(game.id)
+    setSeriesError(null)
+    try {
+      await saveChallengeSeriesResult(game)
+      setSavedSeriesGameIds((current) => new Set([...current, game.id]))
+    } catch (error) {
+      setSeriesError({ id: game.id, message: firebaseErrorMessage(error) })
+    } finally {
+      savingResultRef.current = null
+      setSavingResultId(null)
+    }
+  }
 
   const saveResult = async () => {
     if (!match || savingResultRef.current || savedResultIds.has(match.id)) return
@@ -717,12 +740,14 @@ function MatchDesk({ isAdmin }) {
 
   const startMatch = (event) => {
     event.preventDefault()
-    setTournament(null)
     const matchTeams = teams.map((team) => ({
       ...team,
       players: team.players.slice(0, playersPerSide),
     }))
+    if (duplicatePlayerNames(matchTeams.flatMap((team) => team.players.map((player) => player.name))).length) return
+    setTournament(null)
     const game = createGame(matchTeams, format, Number(target), null, openingServe, openingServerIndex)
+    if (bestOf > 1) game.series = { id: crypto.randomUUID(), bestOf, games: [] }
     setUndoStack([])
     setMatch(game)
   }
@@ -734,6 +759,7 @@ function MatchDesk({ isAdmin }) {
       ...team,
       players: team.players.slice(0, playersPerSide),
     })).slice(0, entrantCount)
+    if (duplicatePlayerNames(entrants.flatMap((team) => team.players.map((player) => player.name))).length) return
     const bracket = createTournamentBracket(entrants)
     setTournament({ ...bracket, format, target: Number(target) })
     const firstRound = bracket.rounds[0]
@@ -949,7 +975,7 @@ function MatchDesk({ isAdmin }) {
   )
 
   const undoPoint = () => {
-    if (!undoStack.length || savedResultIds.has(match.id) || savingResultRef.current === match.id) return
+    if (!undoStack.length || savedResultIds.has(match.id) || savedSeriesGameIds.has(match.id) || savingResultRef.current === match.id) return
     const previousMatch = undoStack[undoStack.length - 1]
     setMatch((current) => ({ ...previousMatch, displayOrder: current.displayOrder }))
     setUndoStack((current) => current.slice(0, -1))
@@ -976,6 +1002,7 @@ function MatchDesk({ isAdmin }) {
   }
 
   const resetMatch = () => {
+    if (savingResultRef.current || savedSeriesGameIds.has(match.id)) return
     if (!window.confirm('Reset the score and point log for this game?')) return
 
     setUndoStack([])
@@ -1005,12 +1032,28 @@ function MatchDesk({ isAdmin }) {
   const getPlayerPerformance = (side, playerIndex) => calculatePlayerPerformance(match, side, playerIndex)
 
   const returnToSetup = () => {
+    if (savingResultRef.current) return
     if (match?.tournamentRef) {
       showTournamentBracket()
       return
     }
     setMatch(null)
     setUndoStack([])
+  }
+
+  const nextSeriesGame = () => {
+    if (!match?.series || match.winner === null || savingResultRef.current) return
+    if (!savedResultIds.has(match.id)
+      && !window.confirm('Start the next game? This game has not been saved to the leaderboard. Continuing keeps its series score but leaves it out of the leaderboard.')) return
+    const series = advanceMatchSeries(match.series, match)
+    const next = createGame(match.teams, match.format, match.target, null, match.winner)
+    setMatch({ ...next, series })
+    setUndoStack([])
+    setPointEntry(null)
+    setPostCopied(false)
+    setPostCopyFailed(false)
+    setDownloadStatus('')
+    setResultError(null)
   }
 
   if (!match && tournament) {
@@ -1099,6 +1142,10 @@ function MatchDesk({ isAdmin }) {
     const tournamentPreview = isTournamentSetup
       ? createTournamentBracket(tournamentTeams.slice(0, previewTeamCount))
       : null
+    const activePlayers = setupTeams.slice(0, isTournamentSetup ? previewTeamCount : 2)
+      .flatMap((team) => team.players.slice(0, playersPerSide))
+    const duplicates = duplicatePlayerNames(activePlayers.map((player) => player.name))
+    const duplicateKeys = new Set(duplicates.map(playerNameKey))
     const openingServeTeams = isTournamentSetup
       ? tournamentPreview.rounds[0].matches.find((entry) => !entry.isBye)?.sides
       : teams
@@ -1139,7 +1186,6 @@ function MatchDesk({ isAdmin }) {
               <span className="step-number">01</span>
               <div>
                 <h2>Match format</h2>
-                <p>{isTournamentSetup ? 'Choose the format for all tournament games.' : 'Choose how many players are on each side.'}</p>
               </div>
             </div>
 
@@ -1165,7 +1211,6 @@ function MatchDesk({ isAdmin }) {
               <span className="step-number">02</span>
               <div>
                 <h2>{isTournamentSetup ? 'Tournament entrants' : 'Players'}</h2>
-                <p>{isTournamentSetup ? `Enter the ${previewTeamCount} teams below. Pairings use the numbered schedule slots.` : 'Add a name and photo for each player.'}</p>
               </div>
             </div>
 
@@ -1206,7 +1251,9 @@ function MatchDesk({ isAdmin }) {
                           playerIndex={playerIndex}
                           teamIndex={teamIndex}
                           onChange={(name) => setSetupPlayer(teamIndex, playerIndex, { name })}
-                          savedNames={savedNames}
+                          savedNames={availablePlayerNames(savedNames, activePlayers
+                            .filter((other) => other !== player).map((other) => other.name))}
+                          duplicate={duplicateKeys.has(playerNameKey(player.name))}
                         />
                       </div>
                     ))}
@@ -1216,7 +1263,7 @@ function MatchDesk({ isAdmin }) {
             </div>
 
             <div className="roster-status">
-              <p>Names of users who have signed in are added automatically unless removed by an admin. Type in any player field to choose a suggested name or enter a name for this game only. Suggested names remain after sign-out; other profile details and photos are not shared.</p>
+              <InfoHint label="About player names"><p>Names of users who have signed in are added automatically unless removed by an admin. Type in any player field to choose a suggested name or enter a name for this game only. Names already used in another active slot are hidden from suggestions. Each player must have a unique name. Suggested names remain after sign-out; other profile details and photos are not shared.</p></InfoHint>
               {rosterState.error ? (
                 <p className="auth-error" role="alert">{rosterState.error} Reload the page after resolving the issue to reconnect.</p>
               ) : (
@@ -1230,7 +1277,7 @@ function MatchDesk({ isAdmin }) {
                   <span className="step-number">04</span>
                   <div>
                     <h2>Opening round schedule</h2>
-                    <p>Teams are paired by slot. Winners advance to the next round.</p>
+                    <InfoHint label="About tournament pairings"><p>Teams are paired by slot. Winners advance to the next round.</p></InfoHint>
                   </div>
                 </div>
                 <div className="schedule-slots">
@@ -1279,7 +1326,6 @@ function MatchDesk({ isAdmin }) {
               <span className="step-number">{isTournamentSetup ? '02' : '03'}</span>
               <div>
                 <h2>Game point</h2>
-                <p>Choose the score that starts game point.</p>
               </div>
             </div>
             <div className="target-options" role="group" aria-label="Game point threshold">
@@ -1298,6 +1344,16 @@ function MatchDesk({ isAdmin }) {
             </div>
 
             {isTournamentSetup && <p className="target-note">{previewTeamCount} teams play a single-elimination bracket.</p>}
+
+            {!isTournamentSetup && <>
+              <label className="serve-select-label" htmlFor="match-series">Challenge series</label>
+              <select id="match-series" value={bestOf} onChange={(event) => setBestOf(Number(event.target.value))}>
+                <option value={1}>Single game</option>
+                <option value={3}>Best of 3 games</option>
+                <option value={5}>Best of 5 games</option>
+              </select>
+              {bestOf > 1 && <InfoHint label="Challenge series rules"><p>First side to win {Math.floor(bestOf / 2) + 1} games wins the series. Save each completed game separately for the individual-game leaderboard.</p></InfoHint>}
+            </>}
 
             <label className="serve-select-label" htmlFor="opening-serve">First serving side</label>
             <select
@@ -1326,11 +1382,15 @@ function MatchDesk({ isAdmin }) {
             </select>
 
             {!isTournamentSetup && (
-              <p className="target-note">
+              <InfoHint label="Scoring rules"><p>
                 Reach {Number(target) + 1} and lead by 2 to win. At {target}-{target}, {Number(target) + 2} wins.
-              </p>
+              </p></InfoHint>
             )}
-            <button className="start-button" type="submit">
+            {duplicates.length > 0 && <p id="duplicate-player-error" className="auth-error" role="alert">
+              Each player must be unique. Used more than once: {duplicates.join(', ')}.
+              Names that differ only by capitalization or extra spaces are the same player.
+            </p>}
+            <button className="start-button" type="submit" disabled={duplicates.length > 0}>
               {isTournamentSetup ? 'Start tournament' : 'Start match'} <span aria-hidden="true">-&gt;</span>
             </button>
           </aside>
@@ -1340,6 +1400,7 @@ function MatchDesk({ isAdmin }) {
   }
 
   const servingPlayer = getServer(match.serveSide)
+  const series = match.series ? seriesSummary(match.series, match) : null
   const currentTournamentRound = match.tournamentRef
     ? tournament?.rounds.find((round) => round.key === match.tournamentRef.roundKey)
     : null
@@ -1378,7 +1439,7 @@ function MatchDesk({ isAdmin }) {
           >
             <span aria-hidden="true">&#8644;</span> Switch sides
           </button>
-          <button className="reset-button" type="button" onClick={resetMatch} title="Reset score and point log">
+          <button className="reset-button" type="button" onClick={resetMatch} disabled={Boolean(savingResultId) || savedSeriesGameIds.has(match.id)} title="Reset score and point log">
             <span aria-hidden="true">&#8635;</span> Reset game
           </button>
           <button className="text-button" type="button" onClick={returnToSetup}>
@@ -1386,6 +1447,28 @@ function MatchDesk({ isAdmin }) {
           </button>
         </div>
       </header>
+
+      {series && <section className="victory-panel" aria-label="Series score">
+        <h2>Challenge series</h2>
+        <p className="eyebrow">Best of {match.series.bestOf} · Game {match.series.games.length + 1}</p>
+        <h2>{series.winner === null ? 'Series score' : `${match.teams[series.winner].name} wins the series`}</h2>
+        <p role="status">{match.teams[0].name} {series.wins[0]} - {series.wins[1]} {match.teams[1].name}</p>
+        <InfoHint label="Series rules"><p>First to {series.requiredWins} game wins. Each game winner serves first in the next game.</p></InfoHint>
+        <ol>{series.games.map((game, index) => <li key={index}>
+          Game {index + 1}: {match.teams[0].name} {game.scores[0]} - {game.scores[1]} {match.teams[1].name}
+        </li>)}</ol>
+        {match.winner !== null && series.winner === null && <button className="winner-continue-button"
+          type="button" disabled={Boolean(savingResultId)} onClick={nextSeriesGame}>Start game {match.series.games.length + 2}</button>}
+        {series.winner !== null && <div className="leaderboard-save">
+          {savedSeriesGameIds.has(match.id) ? <p role="status">Challenge series saved. Final-game Undo and Reset are locked. Use Edit setup to start a new series.</p>
+            : isAdmin ? <>
+              <InfoHint label="About saving a series"><p>Save one series win/loss to the separate Challenge series leaderboard. Individual game saves are independent.</p></InfoHint>
+              <button className="download-result-button" type="button" disabled={Boolean(savingResultId)}
+                onClick={saveSeries}>Save Challenge series to leaderboard</button>
+            </> : <p>Only an admin can save the completed Challenge series.</p>}
+          {seriesError?.id === match.id && <p className="auth-error" role="alert">{seriesError.message} Series not confirmed saved. Retry before leaving.</p>}
+        </div>}
+      </section>}
 
       {match.winner !== null && (
         <section className="victory-panel" aria-labelledby="victory-title">
@@ -1423,14 +1506,15 @@ function MatchDesk({ isAdmin }) {
           <div className="leaderboard-save">
             {savedResultIds.has(match.id) ? (
               <p role="status">Saved to the leaderboard. This final result is locked; reset starts a new game without removing this result.</p>
-            ) : isAdmin ? (
+            ) : canSaveGames ? (
               <>
-                <p>Save this final result to maintain player performance across sign-ins. Saving locks Undo for this game. Check names and scores first; leaving without saving will not count this match.</p>
+                <p>Check names and scores. Saving locks Undo.</p>
+                <InfoHint label="About saving a result"><p>Save this final result to maintain player performance across sign-ins. Leaving without saving will not count this match. Reset starts a new game without deleting the saved result.</p></InfoHint>
                 <button className="download-result-button" type="button" disabled={Boolean(savingResultId)} onClick={saveResult}>
                   {savingResultId === match.id ? 'Saving result...' : 'Save final result to leaderboard'}
                 </button>
               </>
-            ) : <p>Only an admin can save this completed match to the leaderboard.</p>}
+            ) : <p>An admin must grant individual-game saving access before you can save this result.</p>}
             {resultError?.id === match.id && <p className="auth-error" role="alert">{resultError.message} Result not confirmed saved. Retry saving before leaving.</p>}
           </div>
           {match.tournamentRef && (
@@ -1555,7 +1639,7 @@ function MatchDesk({ isAdmin }) {
           </p>
           {match.winner === null && match.format === 'doubles' && <span className="serve-court-label">{match.scores[match.serveSide] % 2 === 0 ? 'Right service court' : 'Left service court'}</span>}
         </div>
-        <button className="undo-button" type="button" onClick={undoPoint} disabled={!undoStack.length || savedResultIds.has(match.id) || savingResultId === match.id}>
+        <button className="undo-button" type="button" onClick={undoPoint} disabled={!undoStack.length || savedResultIds.has(match.id) || savedSeriesGameIds.has(match.id) || savingResultId === match.id}>
           <span aria-hidden="true">&#8630;</span> Undo point
         </button>
       </section>
@@ -1744,7 +1828,7 @@ function App() {
           <>
             <p className="account-welcome">Welcome, {profile.fullName}</p>
             <AdminWorkspace key={user.uid} uid={user.uid}>
-              {(isAdmin) => <MatchDesk isAdmin={isAdmin} />}
+              {(isAdmin, canSaveGames) => <MatchDesk isAdmin={isAdmin} canSaveGames={canSaveGames} />}
             </AdminWorkspace>
           </>
         )}

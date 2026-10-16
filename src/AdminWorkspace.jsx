@@ -3,6 +3,9 @@ import { managePlayerName, subscribeToAdminAccess } from './adminRoster.js'
 import { subscribeToPlayerEntries } from './playerRoster.js'
 import { firebaseErrorMessage } from './firebase.js'
 import Leaderboard from './Leaderboard.jsx'
+import ResultPermissions from './ResultPermissions.jsx'
+import { subscribeToResultSaving } from './resultPermissions.js'
+import InfoHint from './InfoHint.jsx'
 
 function PlayerAdminPage() {
   const [players, setPlayers] = useState([])
@@ -47,7 +50,7 @@ function PlayerAdminPage() {
     <main className="page-shell admin-page">
       <p className="eyebrow">Administration</p>
       <h1>Manage player names</h1>
-      <p>Add names to the shared suggestions or remove them for everyone. This does not delete accounts or change names in an existing match.</p>
+      <InfoHint label="About player suggestions"><p>Add names to the shared suggestions or remove them for everyone. This does not delete accounts or change names in an existing match.</p></InfoHint>
       {loadError ? (
         <div className="auth-error" role="alert">
           <p>{loadError}</p>
@@ -114,29 +117,38 @@ function AdminWorkspace({ uid, children }) {
     setIsAdmin(false)
     setError(firebaseErrorMessage(failure))
   }), [uid, retry])
+  const [canSaveGames, setCanSaveGames] = useState(false)
+  useEffect(() => subscribeToResultSaving(uid, setCanSaveGames, (failure) => {
+    setCanSaveGames(false)
+    setError(firebaseErrorMessage(failure))
+  }), [uid, retry])
 
   const showingAdmin = isAdmin && page === 'admin'
+  const showingPermissions = isAdmin && page === 'permissions'
   return (
     <>
       {error && (
         <div className="account-welcome auth-error" role="alert">
-          <p>Admin access could not be checked. {error}</p>
+          <p>Workspace permissions could not be checked. {error}</p>
           <button type="button" onClick={() => {
             setError('')
             setRetry((current) => current + 1)
-          }}>Retry admin access</button>
+          }}>Retry workspace permissions</button>
         </div>
       )}
         <nav className="admin-navigation" aria-label="Workspace">
-          <button type="button" aria-current={page === 'match' || (page === 'admin' && !isAdmin) ? 'page' : undefined}
+          <button type="button" aria-current={page === 'match' || (['admin', 'permissions'].includes(page) && !isAdmin) ? 'page' : undefined}
             onClick={() => setPage('match')}>Match desk</button>
           <button type="button" aria-current={page === 'leaderboard' ? 'page' : undefined}
             onClick={() => setPage('leaderboard')}>Leaderboard</button>
           {isAdmin && <button type="button" aria-current={showingAdmin ? 'page' : undefined}
             onClick={() => setPage('admin')}>Admin: Players</button>}
+          {isAdmin && <button type="button" aria-current={showingPermissions ? 'page' : undefined}
+            onClick={() => setPage('permissions')}>Admin: Saving access</button>}
         </nav>
-      <div hidden={showingAdmin || page === 'leaderboard'}>{children(isAdmin)}</div>
+      <div hidden={showingAdmin || showingPermissions || page === 'leaderboard'}>{children(isAdmin, isAdmin || canSaveGames)}</div>
       {showingAdmin && <PlayerAdminPage />}
+      {showingPermissions && <ResultPermissions />}
       {page === 'leaderboard' && <Leaderboard isAdmin={isAdmin} />}
     </>
   )

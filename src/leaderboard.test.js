@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { calculateLeaderboard, calculateTeamLeaderboard, completedMatchResult, filterLeaderboardResults, paginateLeaderboard } from './leaderboard.js'
+import { calculateLeaderboard, calculateTeamLeaderboard, completedMatchResult, filterLeaderboardResults, paginateLeaderboard, resultSideNames } from './leaderboard.js'
 
 const game = (overrides = {}) => ({
   id: 'test-game', format: 'singles', target: 20, scores: [22, 15], winner: 0,
@@ -11,6 +11,21 @@ const game = (overrides = {}) => ({
     { team: 0 },
   ],
   ...overrides,
+})
+
+test('opponent labels preserve score-side order for singles and doubles even with interleaved players', () => {
+  const singles = completedMatchResult(game())
+  assert.deepEqual(resultSideNames(singles), ['Alex', 'Sam'])
+  const doubles = {
+    winner: 1, scores: [1, 2],
+    players: [
+      { name: 'Ravi', side: 1 }, { name: 'Arun', side: 0 },
+      { name: 'Kumar', side: 1 }, { name: 'Bala', side: 0 },
+    ],
+  }
+  const sides = resultSideNames(doubles)
+  assert.deepEqual(sides, ['Arun / Bala', 'Ravi / Kumar'])
+  assert.equal(sides[doubles.winner], 'Ravi / Kumar')
 })
 
 test('captures normalized final scores and only attributed player rallies', () => {

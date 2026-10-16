@@ -1,4 +1,5 @@
 import { useId } from 'react'
+import InfoHint from './InfoHint.jsx'
 
 function ProfileFields({ value, onChange, disabled }) {
   const id = useId()
@@ -26,7 +27,8 @@ function ProfileFields({ value, onChange, disabled }) {
           />
         </div>
       ))}
-      <p className="profile-privacy">Your full name is added to player suggestions for all signed-in users, even after you sign out, unless an admin removes it. Phone number, city, and club/team stay private.</p>
+      <p className="profile-privacy">Your full name is shared in player suggestions.</p>
+      <InfoHint label="Profile privacy"><p>Your full name is added to player suggestions for all signed-in users, even after you sign out, unless an admin removes it. Phone number, city, and club/team stay private.</p></InfoHint>
     </fieldset>
   )
 }
