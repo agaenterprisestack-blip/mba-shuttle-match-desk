@@ -95,9 +95,9 @@ function AccountProfileGate({ uid, initialDetails, onComplete, children }) {
 
   return (
     <main className="profile-setup">
-      <h1>{addingNickname ? 'Add your player nickname' : 'Complete your profile'}</h1>
+      <h1>{addingNickname ? 'Add your jersey name' : 'Complete your profile'}</h1>
       <p>{addingNickname
-        ? 'Choose the nickname to show in player suggestions. Your existing profile details will stay unchanged.'
+        ? 'Choose the jersey name to show in player suggestions. Your existing profile details will stay unchanged.'
         : 'Your account is signed in. Save your details to continue; no need to create another account.'}</p>
       <form className="login-form" onSubmit={handleSave}>
         <ProfileFields value={details} onChange={setDetails} disabled={busy} nicknameOnly={addingNickname} />

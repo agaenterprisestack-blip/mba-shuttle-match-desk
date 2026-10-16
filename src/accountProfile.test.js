@@ -25,12 +25,12 @@ mock.module('firebase/firestore', {
 
 const { emptyProfile, needsNickname, normalizeProfile, loadAccountProfile, saveAccountProfile } = await import('./accountProfile.js')
 
-test('requires full name and nickname but accepts empty optional details', () => {
+test('requires full name and jersey name but accepts empty optional details', () => {
   const profile = { ...emptyProfile, fullName: '  Alex \t Smith ', nickname: ' Ace \t Alex ' }
   assert.deepEqual(normalizeProfile(profile), { fullName: 'Alex Smith', nickname: 'Ace Alex', phone: '', city: '', club: '' })
   assert.throws(() => normalizeProfile({ ...emptyProfile, fullName: '   ' }), /full name/)
   for (const nickname of ['', '   ', undefined, 'n'.repeat(81)]) {
-    assert.throws(() => normalizeProfile({ ...profile, nickname }), /nickname/)
+    assert.throws(() => normalizeProfile({ ...profile, nickname }), /jersey name/)
   }
 })
 

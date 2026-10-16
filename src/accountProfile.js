@@ -18,7 +18,7 @@ export const normalizeProfile = (details) => {
     throw new Error('Enter your full name using 1 to 80 characters.')
   }
   if (needsNickname(profile)) {
-    throw new Error('Enter your nickname using 1 to 80 characters.')
+    throw new Error('Enter your jersey name using 1 to 80 characters.')
   }
   if (profile.phone.length > 32 || profile.city.length > 80 || profile.club.length > 80) {
     throw new Error('Phone number must be at most 32 characters; city and club/team at most 80.')

@@ -8,7 +8,7 @@ function ProfileFields({ value, onChange, disabled, nicknameOnly = false }) {
       <legend>Basic profile details</legend>
       {[
         { key: 'fullName', label: 'Full name', autoComplete: 'name', required: true, maxLength: 80 },
-        { key: 'nickname', label: 'Nickname', autoComplete: 'nickname', required: true, maxLength: 80 },
+        { key: 'nickname', label: 'Jersey name', autoComplete: 'nickname', required: true, maxLength: 80 },
         { key: 'phone', label: 'Phone number (optional)', autoComplete: 'tel', type: 'tel', maxLength: 32 },
         { key: 'city', label: 'City (optional)', autoComplete: 'address-level2', maxLength: 80 },
         { key: 'club', label: 'Club / team (optional)', autoComplete: 'organization', maxLength: 80 },
@@ -29,8 +29,8 @@ function ProfileFields({ value, onChange, disabled, nicknameOnly = false }) {
           />
         </div>
       ))}
-      <p className="profile-privacy">Your nickname is shared in player suggestions.</p>
-      <InfoHint label="Profile privacy"><p>Your nickname is added to player suggestions for all signed-in users, even after you sign out, unless an admin removes it. Your full name is visible to admins in the saving-access list. Phone number, city, and club/team stay private.</p></InfoHint>
+      <p className="profile-privacy">Your jersey name is shared in player suggestions.</p>
+      <InfoHint label="Profile privacy"><p>Your jersey name is added to player suggestions for all signed-in users, even after you sign out, unless an admin removes it. Your full name is visible to admins in the saving-access list. Phone number, city, and club/team stay private.</p></InfoHint>
     </fieldset>
   )
 }
